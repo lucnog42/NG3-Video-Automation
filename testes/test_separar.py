@@ -112,6 +112,12 @@ class Preparar(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_tentativas_terminam_na_cpu(self):
+        c = {"modelo": "roformer.ckpt", "modelo_leve": "leve.onnx", "dispositivo": "auto"}
+        self.assertEqual(separar.tentativas(c), [("roformer.ckpt", "cuda"), ("leve.onnx", "cuda"), ("leve.onnx", "cpu")])
+        self.assertEqual(separar.tentativas({**c, "dispositivo": "cpu"}), [("leve.onnx", "cpu")])
+        self.assertEqual(separar.tentativas({**c, "dispositivo": "cuda"}), [("roformer.ckpt", "cuda"), ("leve.onnx", "cuda")])
+
 
 class Tarefa(unittest.TestCase):
     def chamar(self, dados):

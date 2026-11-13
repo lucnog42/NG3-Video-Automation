@@ -1,5 +1,9 @@
-# Separação de voz/música (audio-separator: modelos UVR/MDX/RoFormer). Venv próprio, separado do ASR:
-#   python3.11 -m venv .venv-sep && .venv-sep/bin/pip install -r requirements-separacao.txt
-# Depois da primeira instalação que funcionar, fixe as versões aqui (pip freeze), como no requirements-asr.txt.
-audio-separator[gpu]
-scenedetect[opencv-headless]
+# Separação de voz/música (audio-separator: modelos UVR/MDX/RoFormer). Venv próprio, separado do ASR.
+# Pode ficar noutro disco ([ambientes] sep = "..." no config/local.toml). Num disco exFAT (sem links):
+#   mkdir -p <dir>/lib64 && <python3.11 real> -m venv --copies <dir>
+#   TMPDIR=<outro dir no mesmo disco> <dir>/bin/python -m pip install --no-cache-dir -r requirements-separacao.txt
+# Versões do primeiro ambiente que funcionou (2026-11-13; torch com CUDA 13.2, driver 615; ~12 GB).
+audio-separator[gpu]==0.48.0
+torch==2.15.0
+onnxruntime-gpu==1.32.0
+scenedetect[opencv-headless]==0.7.3

@@ -118,6 +118,19 @@ def cache_voz(video: str) -> str:
     return os.path.join(pasta, f"{_chave(video)}_voz.wav")
 
 
+def tentativas(c: dict) -> list[tuple[str, str]]:
+    """(modelo, dispositivo) em ordem: o RoFormer e o leve na GPU; se a placa não der (outro
+    programa ocupando os 4 GB), o leve na CPU, que é lento mas termina."""
+    modelos = [m for m in (c.get("modelo"), c.get("modelo_leve")) if m]
+    disp = str(c.get("dispositivo") or "auto")
+    if disp == "cpu":
+        return [(modelos[-1], "cpu")] if modelos else []
+    out = [(m, "cuda") for m in modelos]
+    if disp == "auto" and modelos:
+        out.append((modelos[-1], "cpu"))
+    return out
+
+
 def separar(video: str) -> tuple[str | None, dict]:
     """(wav 16 kHz mono só com a voz, info). None se não deu: a info diz por quê."""
     alvo = cache_voz(video)
@@ -135,9 +148,12 @@ def separar(video: str) -> tuple[str | None, dict]:
         if r.returncode != 0:
             return None, {"erro": "ffmpeg não extraiu o áudio"}
         ultimo = ""
-        for modelo in [m for m in (c.get("modelo"), c.get("modelo_leve")) if m]:
+        for modelo, dispositivo in tentativas(c):
+            amb = dict(os.environ)
+            if dispositivo == "cpu":
+                amb["CUDA_VISIBLE_DEVICES"] = ""          # o torch e o onnx não veem a placa
             r = subprocess.run([caminhos.python_de("sep"), os.path.abspath(__file__), "rodar", entrada, tmp, modelo],
-                               capture_output=True, text=True, timeout=1800)
+                               capture_output=True, text=True, timeout=3600, env=amb)
             saida = (r.stdout.strip().splitlines() or [""])[-1]
             try:
                 arqs = json.loads(saida).get("arquivos") or []
@@ -150,11 +166,11 @@ def separar(video: str) -> tuple[str | None, dict]:
                                      "-ac", "1", "-ar", str(SR), "-c:a", "pcm_s16le", parcial], capture_output=True)
                 if r2.returncode == 0:
                     os.replace(parcial, alvo)
-                    return alvo, {"modelo": modelo}
+                    return alvo, {"modelo": modelo, "dispositivo": dispositivo}
             ultimo = (r.stderr or saida)[-300:]
         return None, {"erro": f"separação falhou: {ultimo.strip()}"}
     except subprocess.TimeoutExpired:
-        return None, {"erro": "separação passou de 30 min"}
+        return None, {"erro": "separação passou de 1 h"}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
