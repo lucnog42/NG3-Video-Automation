@@ -1,4 +1,5 @@
-//! A janela: topo (abas, busca, filtros), conteúdo da aba, rodapé (seleção e tarefas), preview.
+//! A janela, no layout do mockup (`claude/mockup-painel-ng3.html`): lateral com a marca e as abas,
+//! cabeçalho com título e busca, filtros, conteúdo da aba, rodapé (seleção e tarefas), preview.
 
 mod comum;
 mod grade;
@@ -41,13 +42,18 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
                 .child(row().w_full().child(spacer()).child(conteudo_chaves(s, t, &k).w(640.0)).child(spacer())),
         },
     };
-    let mut raiz = col().key("raiz").w_full().h_full().fill(t.bg)
-        .child(topo(s, t, &k))
-        .child(corpo)
-        .child(rodape(s, t));
-    if s.tarefas_abertas {
-        raiz = raiz.child(tarefas(s, t));
+    let mut principal = col().key("principal").grow(1.0).min_w(0.0).h_full().fill(t.bg)
+        .child(cabecalho(s, t, &k));
+    if !s.aba.sem_lista() {
+        principal = principal.child(filtros(s, t));
     }
+    principal = principal.child(corpo).child(rodape(s, t));
+    if s.tarefas_abertas {
+        principal = principal.child(tarefas(s, t));
+    }
+    let raiz = row().key("raiz").w_full().h_full().fill(t.bg)
+        .child(lateral(s, t))
+        .child(principal);
     let mut camadas = vec![];
     let tira_w = cx.layout_size("tira").map(|v| v[0]);
     if let Some(p) = preview::preview(s, t, tira_w) {
@@ -70,53 +76,113 @@ fn aviso_central(msg: &str, t: Tema) -> El {
         .child(text(msg.to_string()).font(tema::NORMAL.lh(20.0)).color(t.dim).max_w(640.0))
 }
 
-fn topo(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
-    // abas
-    let mut abas = row().h(32.0).padding(3.0).gap(4.0).radius(9.0).fill(t.card2).border(1.0, t.linha);
-    for a in Aba::TODAS {
-        let on = a == s.aba;
-        let n = match a {
-            Aba::Posts => s.posts.len(),
-            Aba::Cortes => s.cortes.len(),
-            Aba::Recomendados => 0,
-            Aba::Roteiros => s.x.roteiros.len(),
-            Aba::Importar => s.x.fontes.iter().filter(|f| f.origem == "importada").count(),
-            Aba::Plugins => s.plugins.quantos(),
-            Aba::Config => 0,
-        };
-        let rot = if n > 0 { format!("{} {}", a.rotulo(), n) } else { a.rotulo().to_string() };
-        abas = abas.child(row().key(format!("aba-{}", a.rotulo())).h_full().px(12.0).center_y().radius(6.0)
-            .fill(if on { t.acento } else { rune::Color::TRANSPARENT })
-            .hover(t.linha_forte.alpha(0.2)).cursor(Cursor::Pointer)
-            .child(text(rot).font(tema::PEQ_M).color(if on { tema::TINTA_ACENTO } else { t.dim }))
-            .on_press(move |s: &mut App| s.trocar_aba(a)));
+/// Nome e subtítulo de cada aba, no cabeçalho.
+fn titulo(a: Aba) -> (&'static str, &'static str) {
+    match a {
+        Aba::Importar => ("Importar", "Fontes e pastas importadas"),
+        Aba::Posts => ("Posts", "Acervo publicado: pilar, data, curtidas e score"),
+        Aba::Recomendados => ("Repost", "Ranking de reaproveitamento dos posts"),
+        Aba::Cortes => ("Cortes", "Uma pasta de cortes vira um projeto"),
+        Aba::Roteiros => ("Roteiros", "Roteiros a partir das falas transcritas"),
+        Aba::Plugins => ("Plugins", "Plugins Luau, com os parâmetros de cada um"),
+        Aba::Config => ("Chaves e config", "IA das sugestões, chaves de API e marca"),
     }
-    let led = if s.ponte.is_some() { t.acento } else { t.alerta };
-    let estado = if s.ponte.is_some() { "motor Python ligado" } else { "sem motor Python" };
-    let linha1 = row().w_full().h(36.0).gap(14.0).center_y()
-        .child(row().key("cliente").h(30.0).px(8.0).gap(6.0).center_y().radius(7.0)
-            .fill(if s.x.clientes_aberto { t.acento.alpha(0.12) } else { rune::Color::TRANSPARENT })
-            .hover(t.linha_forte.alpha(0.2)).cursor(Cursor::Pointer)
-            .child(text(s.nome_cliente()).font(tema::TITULO).color(t.txt))
-            .child(text("▾").font(tema::PEQ).color(t.dim))
-            .on_press(|s: &mut App| s.x.clientes_aberto = !s.x.clientes_aberto))
-        .child(text(format!("{} posts · {} cortes", s.posts.len(), s.cortes.len())).font(tema::PEQ).color(t.dim))
-        .child(abas)
+}
+
+/// A lateral do mockup: logo, seletor de marca, abas com contagem e, no pé, o motor e a IA.
+fn lateral(s: &App, t: Tema) -> El {
+    let logo = el().size(28.0, 28.0).radius(7.0).fill(t.acento)
+        .linear_gradient(std::f32::consts::FRAC_PI_4 * 3.0, [(0.0, t.acento), (1.0, t.rep)])
+        .center()
+        .child(text("NG3").font(rune::tok::TextStyle::new(11.0, 700.0)).color(rune::Color::WHITE));
+    let marca = row().key("cliente").w_full().h(32.0).px(10.0).gap(6.0).center_y().radius(8.0)
+        .fill(if s.x.clientes_aberto { t.acento.alpha(0.12) } else { t.card2 })
+        .border(1.0, if s.x.clientes_aberto { t.acento } else { t.linha })
+        .hover(t.linha_forte.alpha(0.3)).cursor(Cursor::Pointer)
+        .child(text("Marca").font(tema::PEQ).color(t.dim))
         .child(spacer())
-        .child(row().gap(6.0).center_y()
+        .child(text(format!("{} ▾", s.nome_cliente())).font(tema::PEQ_M).color(t.txt).truncate().min_w(0.0))
+        .on_press(|s: &mut App| s.x.clientes_aberto = !s.x.clientes_aberto);
+
+    let n_import = s.x.fontes.iter().filter(|f| f.origem == "importada").count();
+    let nav = col().key("nav").w_full().gap(2.0)
+        .child(item_nav(s, t, Some(Aba::Importar), "Importar", n_import))
+        .child(item_nav(s, t, None, "Tags da marca", 0))
+        .child(item_nav(s, t, Some(Aba::Posts), "Posts", s.posts.len()))
+        .child(item_nav(s, t, Some(Aba::Recomendados), "Repost", 0))
+        .child(item_nav(s, t, Some(Aba::Cortes), "Cortes", s.cortes.len()))
+        .child(item_nav(s, t, Some(Aba::Roteiros), "Roteiros", s.x.roteiros.len()))
+        .child(item_nav(s, t, None, "Projetos", 0))
+        .child(text("OUTRAS ABAS").font(tema::MINI).color(t.fraco).pt(14.0).pb(6.0).px(10.0))
+        .child(item_nav(s, t, Some(Aba::Plugins), "Plugins", s.plugins.quantos()))
+        .child(item_nav(s, t, Some(Aba::Config), "Chaves e config", 0));
+
+    let led = if s.ponte.is_some() { t.ok } else { t.alerta };
+    let estado = if s.ponte.is_some() { "motor Python ligado" } else { "sem motor Python" };
+    let pe = col().key("lateral-pe").w_full().gap(8.0).pt(10.0).border_sides([1.0, 0.0, 0.0, 0.0], t.linha)
+        .child(row().gap(6.0).px(4.0).center_y()
             .child(el().size(7.0, 7.0).radius(4.0).fill(led))
             .child(text(estado).font(tema::PEQ).color(t.dim)))
         .child(botao_claude(s, t));
 
-    let busca = TextInput::new(&s.busca)
-        .placeholder("buscar na pasta, na legenda e no que é falado")
-        .on_edit(|s: &mut App| &mut s.busca)
-        .on_change(|s: &mut App, tx| s.tecla_busca(tx))
-        .build(k)
-        .key("busca").w(340.0);
-    let mut filtros = row().w_full().gap(8.0).center_y().flex_wrap().child(busca);
+    col().key("lateral").w(210.0).h_full().px(10.0).py(14.0).fill(t.card).border_sides([0.0, 1.0, 0.0, 0.0], t.linha)
+        .child(row().w_full().gap(9.0).px(8.0).pt(4.0).pb(16.0).center_y()
+            .child(logo)
+            .child(col().gap(1.0)
+                .child(text("Painel NG3").font(tema::NORMAL_B).color(t.txt))
+                .child(text("Automação de vídeo").font(tema::PEQ).color(t.dim))))
+        .child(col().w_full().px(6.0).pb(14.0).child(marca))
+        .child(nav)
+        .child(spacer())
+        .child(pe)
+}
 
+/// Um item da lateral. `aba: None` é tela do plano que ainda não existe (aparece apagada).
+fn item_nav(s: &App, t: Tema, aba: Option<Aba>, rotulo: &str, n: usize) -> El {
+    let on = aba == Some(s.aba);
+    let mut r = row().key(format!("nav-{rotulo}")).w_full().h(32.0).px(10.0).gap(6.0).center_y().radius(6.0)
+        .fill(if on { t.acento.alpha(0.14) } else { rune::Color::TRANSPARENT })
+        .child(text(rotulo.to_string()).font(if on { tema::NORMAL_M } else { tema::NORMAL })
+            .color(if on { t.acento } else { t.dim }))
+        .child(spacer());
+    match aba {
+        Some(a) => {
+            if n > 0 {
+                r = r.child(row().h(18.0).px(7.0).center_y().radius(9.0).fill(t.card2)
+                    .child(text(n.to_string()).font(tema::PEQ).color(t.dim)));
+            }
+            r.hover(t.card2).cursor(Cursor::Pointer).on_press(move |s: &mut App| s.trocar_aba(a))
+        }
+        None => r.opacity(0.45).child(text("em breve").font(tema::PEQ).color(t.fraco)),
+    }
+}
+
+/// Barra de cima da área principal: título e subtítulo da aba; busca nas abas com lista.
+fn cabecalho(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
+    let (nome, sub) = titulo(s.aba);
+    let mut acoes = row().gap(8.0).center_y();
     if !s.aba.sem_lista() {
+        acoes = acoes
+            .child(text(format!("{} na tela", s.visiveis.len())).font(tema::PEQ).color(t.dim))
+            .child(TextInput::new(&s.busca)
+                .placeholder("buscar na pasta, na legenda e no que é falado")
+                .on_edit(|s: &mut App| &mut s.busca)
+                .on_change(|s: &mut App, tx| s.tecla_busca(tx))
+                .build(k)
+                .key("busca").w(340.0));
+    }
+    row().key("cabecalho").w_full().h(54.0).px(22.0).gap(10.0).center_y()
+        .fill(t.card).border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
+        .child(text(nome).font(tema::TITULO).color(t.txt))
+        .child(text(sub).font(tema::PEQ).color(t.dim).truncate().min_w(0.0))
+        .child(spacer())
+        .child(acoes)
+}
+
+/// Pastilhas de filtro das abas com lista (posts, repost, cortes).
+fn filtros(s: &App, t: Tema) -> El {
+    let mut filtros = row().w_full().gap(8.0).center_y().flex_wrap();
+    {
         if s.aba != Aba::Cortes {
             // anos
             let mut anos: Vec<&str> = s.posts.iter().map(|p| p.ano.as_str()).collect();
@@ -172,17 +238,17 @@ fn topo(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                 s.refiltrar();
             }))
             .child(botao("limpar", "limpar filtros", t.dim, false, t, |s: &mut App| s.limpar_filtros()))
-            .child(text(format!("{} na tela", s.visiveis.len())).font(tema::PEQ).color(t.dim));
+            ;
     }
-    col().key("topo").w_full().gap(9.0).px(16.0).py(10.0).fill(t.bg).border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
-        .child(linha1).child(filtros)
+    row().key("filtros").w_full().px(22.0).py(10.0).fill(t.bg).border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
+        .child(filtros)
 }
 
 fn rodape(s: &App, t: Tema) -> El {
     let n = s.selecao.len();
     let rodando = s.tarefas.iter().filter(|t| t.fim.is_none()).count();
     let mut r = row().key("rodape").w_full().h(52.0).px(16.0).gap(10.0).center_y()
-        .fill(t.bg).border_sides([1.0, 0.0, 0.0, 0.0], t.linha)
+        .fill(t.card).border_sides([1.0, 0.0, 0.0, 0.0], t.linha)
         .child(text(s.rotulo_selecao()).font(tema::NORMAL_M).color(if n > 0 { t.acento } else { t.dim }));
     if n > 0 {
         if s.aba != Aba::Cortes {
@@ -198,9 +264,9 @@ fn rodape(s: &App, t: Tema) -> El {
     r = r.child(botao("ver-tarefas", rot_tarefas, if rodando > 0 { t.alerta } else { t.dim }, s.tarefas_abertas, t,
                       |s: &mut App| s.tarefas_abertas = !s.tarefas_abertas));
     let pode = n > 0 && s.ponte.is_some();
-    r.child(row().key("gerar").h(32.0).px(14.0).center_y().radius(8.0)
-        .fill(if pode { t.acento } else { t.card2 }).cursor(if pode { Cursor::Pointer } else { Cursor::NotAllowed })
-        .child(text(format!("gerar projeto ({n})")).font(tema::NORMAL_M).color(if pode { tema::TINTA_ACENTO } else { t.dim }))
+    r.child(row().key("gerar").h(30.0).px(14.0).center_y().radius(6.0)
+        .fill(if pode { t.acento } else { t.card2 }).border(1.0, if pode { t.acento } else { t.linha_forte }).cursor(if pode { Cursor::Pointer } else { Cursor::NotAllowed })
+        .child(text(format!("gerar projeto ({n})")).font(tema::NORMAL_M).color(if pode { tema::tinta_acento() } else { t.dim }))
         .on_press(|s: &mut App| s.gerar_selecao()))
 }
 
@@ -260,7 +326,7 @@ fn tarefas(s: &App, t: Tema) -> El {
     for tf in s.tarefas.iter().rev().take(6) {
         let (cor, st) = match tf.fim {
             None => (t.alerta, "rodando"),
-            Some(true) => (t.acento, "ok"),
+            Some(true) => (t.ok, "ok"),
             Some(false) => (t.erro, "falhou"),
         };
         let ultimas: Vec<&str> = tf.linhas.iter().rev().take(12).map(String::as_str).collect::<Vec<_>>().into_iter().rev().collect();
@@ -290,14 +356,14 @@ fn botao_claude(s: &App, t: Tema) -> El {
     let (cor, rotulo) = match (s.claude, i.valida) {
         (false, _) => (t.alerta, format!("{nome}: sem chave")),
         (true, Some(false)) => (t.erro, format!("{nome}{fim}: erro")),
-        (true, _) => (t.acento, format!("{nome} ✓{fim}")),
+        (true, _) => (t.ok, format!("{nome} ✓{fim}")),
     };
-    row().key("claude-chave").h(26.0).px(10.0).gap(6.0).center_y().radius(7.0)
+    row().key("claude-chave").w_full().h(28.0).px(10.0).gap(6.0).center_y().radius(7.0)
         .border(1.0, if s.chave_aberta { cor } else { t.linha })
         .fill(if s.chave_aberta { cor.alpha(0.15) } else { rune::Color::TRANSPARENT })
         .hover(t.linha_forte.alpha(0.2)).cursor(Cursor::Pointer)
         .child(el().size(7.0, 7.0).radius(4.0).fill(cor))
-        .child(text(rotulo).font(tema::PEQ_M).color(t.txt))
+        .child(text(rotulo).font(tema::PEQ_M).color(t.txt).truncate().min_w(0.0))
         .on_press(|s: &mut App| s.chave_aberta = !s.chave_aberta)
 }
 
@@ -336,15 +402,15 @@ fn menu_clientes(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                          |s: &mut App| { if !s.x.criando_cliente { s.criar_cliente() } })));
     col().key("camada-clientes").w_full().h_full().absolute(0.0, 0.0)
         .on_press(|s: &mut App| s.x.clientes_aberto = false)
-        .child(row().w_full().padding(16.0).child(painel.mt(44.0).on_press(|_: &mut App| {})).child(spacer()))
+        .child(row().w_full().pl(214.0).pt(76.0).child(painel.on_press(|_: &mut App| {})).child(spacer()))
 }
 
 fn painel_chave(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
     let painel = conteudo_chaves(s, t, k).w(500.0);
     col().key("camada-chave").w_full().h_full().absolute(0.0, 0.0)
         .on_press(|s: &mut App| s.chave_aberta = false)
-        .child(row().w_full().padding(16.0).child(spacer())
-            .child(painel.mt(44.0).on_press(|_: &mut App| {})))
+        .child(col().w_full().h_full().pl(214.0).pb(16.0).child(spacer())
+            .child(painel.on_press(|_: &mut App| {})))
 }
 
 /// As chaves de API (sugestões e vídeo): no painel do botão do topo e na aba "chaves e config".
@@ -445,7 +511,7 @@ fn conteudo_chaves(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(row().w_full().center_y()
             .child(text("Vídeo com IA (OpenRouter)").font(tema::NORMAL_M).color(t.txt))
             .child(spacer())
-            .child(if s.tem_chave_video() { comum::etiqueta(format!("chave …{} ✓", s.chave_info.fim_video), t.acento) }
+            .child(if s.tem_chave_video() { comum::etiqueta(format!("chave …{} ✓", s.chave_info.fim_video), t.ok) }
                    else { comum::etiqueta("sem chave", t.alerta) }))
         .child(text("Chave própria do vídeo (openrouter.ai → Keys), separada da chave das sugestões: \
             pode ser outra conta ou outra chave do OpenRouter, com o seu limite de gasto.").font(tema::PEQ.lh(16.0)).color(t.dim).wrap())

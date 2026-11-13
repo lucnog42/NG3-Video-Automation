@@ -25,7 +25,6 @@ pub enum Aba {
 }
 
 impl Aba {
-    pub const TODAS: [Aba; 7] = [Aba::Posts, Aba::Recomendados, Aba::Roteiros, Aba::Cortes, Aba::Importar, Aba::Plugins, Aba::Config];
     /// abas sem lista de posts/cortes (roteiros, importar, plugins, configurações)
     pub fn sem_lista(self) -> bool { matches!(self, Aba::Roteiros | Aba::Importar | Aba::Plugins | Aba::Config) }
     pub fn rotulo(self) -> &'static str {
