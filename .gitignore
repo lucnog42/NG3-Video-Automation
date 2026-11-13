@@ -4,7 +4,6 @@ dados/
 config/local.toml
 .venv-asr/
 .venv-sep/
-.venv-visao/
 app/target/
 __pycache__/
 *.pyc

@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel NG3 — Mockup fase import, voz e roteiros</title>
+<style>
+:root{
+  --bg:#0e1014; --panel:#161920; --panel2:#1c2029; --line:#272c38; --line2:#343a49;
+  --text:#e6e9f0; --muted:#8b93a7; --faint:#5d6579;
+  --accent:#6d8cff; --accent-bg:rgba(109,140,255,.14);
+  --ok:#4cc38a; --ok-bg:rgba(76,195,138,.14);
+  --warn:#f0b24a; --warn-bg:rgba(240,178,74,.14);
+  --bad:#ef6b6b; --bad-bg:rgba(239,107,107,.14);
+  --ia:#b58cff; --ia-bg:rgba(181,140,255,.10);
+  --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.45;display:flex;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,textarea,select{font:inherit;color:inherit}
+h1,h2,h3,h4{font-weight:600}
+
+/* sidebar */
+.side{width:210px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px}
+.brand{display:flex;align-items:center;gap:9px;padding:4px 8px 16px}
+.logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#6d8cff,#b58cff);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+.brand b{display:block;font-size:13px}
+.brand span{font-size:11px;color:var(--muted)}
+.marca{margin:0 6px 14px;padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);display:flex;justify-content:space-between;color:var(--muted);font-size:12px}
+.marca b{color:var(--text);font-weight:500}
+.nav button{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:8px 10px;border-radius:6px;color:var(--muted);margin-bottom:2px}
+.nav button:hover{background:var(--panel2);color:var(--text)}
+.nav button.on{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.nav .count{font-size:11px;background:var(--panel2);padding:1px 7px;border-radius:10px;color:var(--muted)}
+.nav .count.hot{background:var(--warn-bg);color:var(--warn)}
+.nav small{display:block;padding:14px 10px 6px;font-size:10px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase}
+.nav .dim{opacity:.45;cursor:default}
+.side .foot{margin-top:auto;font-size:11px;color:var(--faint);padding:8px;border-top:1px solid var(--line)}
+
+/* main */
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:54px;flex-shrink:0;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:var(--panel)}
+.top h2{font-size:15px}
+.top .sub{color:var(--muted);font-size:12px;margin-left:10px;font-weight:400}
+.actions{display:flex;gap:8px;align-items:center}
+.screen{display:none;flex:1;min-height:0;overflow:auto}
+.screen.on{display:flex}
+
+/* controls */
+.btn{padding:6px 12px;border-radius:6px;border:1px solid var(--line2);background:var(--panel2);font-size:12.5px;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#06180f;font-weight:600}
+.btn.ghost{background:none}
+.btn.danger{color:var(--bad);border-color:rgba(239,107,107,.4)}
+.btn.sm{padding:3px 8px;font-size:11.5px}
+.input{background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:6px 10px;width:100%;outline:none}
+.input:focus{border-color:var(--accent)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:12px;font-size:11.5px;border:1px solid var(--line2);color:var(--text);background:var(--panel2);white-space:nowrap}
+.chip.sel{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.chip.ia{border-style:dashed;border-color:var(--ia);color:var(--ia);background:var(--ia-bg)}
+.chip.ok{background:var(--ok-bg);border-color:transparent;color:var(--ok)}
+.chip.warn{background:var(--warn-bg);border-color:transparent;color:var(--warn)}
+.chip.bad{background:var(--bad-bg);border-color:transparent;color:var(--bad)}
+.chip.mut{color:var(--muted);border-color:var(--line)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.seg button{padding:5px 12px;font-size:12px;color:var(--muted)}
+.seg button.on{background:var(--accent-bg);color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.lbl{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;display:block}
+.kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--muted)}
+.muted{color:var(--muted)} .mono{font-family:ui-monospace,monospace;font-size:12px}
+.row{display:flex;align-items:center;gap:8px}
+.sp{flex:1}
+.divider{height:1px;background:var(--line);margin:14px 0}
+
+/* thumbs */
+.th{position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#222}
+.th .dur{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.7);font-size:10.5px;padding:0 5px;border-radius:3px;font-family:ui-monospace,monospace}
+.g1{background:linear-gradient(135deg,#1e3a5f,#3b6ea5)}
+.g2{background:linear-gradient(135deg,#2d5a3d,#7fb069)}
+.g3{background:linear-gradient(135deg,#5a2d3d,#c9788a)}
+.g4{background:linear-gradient(135deg,#4a3d1e,#d4a84b)}
+.g5{background:linear-gradient(135deg,#2d2d5a,#7c78d4)}
+.g6{background:linear-gradient(135deg,#1e4a4a,#5fc2b8)}
+.g7{background:linear-gradient(135deg,#3d3d3d,#8a8a8a)}
+.g8{background:linear-gradient(135deg,#5a3a1e,#e08a4a)}
+
+/* ---- IMPORTAR ---- */
+#importar{gap:0}
+.import-main{flex:1;min-width:0;padding:18px 22px;overflow:auto}
+.import-side{width:340px;flex-shrink:0;border-left:1px solid var(--line);background:var(--panel);padding:18px;overflow:auto}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.pipeline{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.step{padding:5px 11px;border-radius:6px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:12px}
+.step b{color:var(--text);margin-right:4px}
+.step.cur{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px;cursor:pointer;position:relative}
+.item:hover{border-color:var(--line2)}
+.item.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.item .check{position:absolute;top:14px;left:14px;width:18px;height:18px;border-radius:5px;border:1.5px solid rgba(255,255,255,.7);background:rgba(0,0,0,.35);z-index:2;display:grid;place-items:center;font-size:11px;color:transparent}
+.item.sel .check{background:var(--accent);border-color:var(--accent);color:#0b1020}
+.item .name{margin:8px 2px 5px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .tags{display:flex;flex-wrap:wrap;gap:4px;min-height:22px}
+.item .tags .chip{font-size:10.5px;padding:1px 7px}
+.item .meta{display:flex;justify-content:space-between;margin:6px 2px 0;font-size:11px;color:var(--faint)}
+.tagcat{margin-bottom:14px}
+.tagcat .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{cursor:pointer}
+.sug{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border:1px dashed var(--ia);border-radius:6px;background:var(--ia-bg);margin-bottom:6px}
+.sug .conf{font-size:11px;color:var(--ia)}
+.acc{position:relative}
+.ac-list{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;z-index:5;overflow:hidden}
+.ac-list div{padding:6px 10px;display:flex;justify-content:space-between}
+.ac-list div:first-child{background:var(--accent-bg)}
+.ac-list span{color:var(--faint);font-size:11px}
+
+/* ---- TAGS ---- */
+#tags{gap:0}
+.cats{width:260px;flex-shrink:0;border-right:1px solid var(--line);padding:16px 12px;overflow:auto;background:var(--panel)}
+.cat{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--muted)}
+.cat:hover{background:var(--panel2)}
+.cat.on{background:var(--accent-bg);color:var(--accent)}
+.cat .n{font-size:11px;background:var(--bg);padding:1px 8px;border-radius:10px;color:var(--muted)}
+.tag-main{flex:1;min-width:0;padding:18px 22px;overflow:auto}
+.tag-side{width:330px;flex-shrink:0;border-left:1px solid var(--line);padding:18px;background:var(--panel);overflow:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:500;padding:8px 12px;border-bottom:1px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.02)}
+td .acts{display:flex;gap:6px;justify-content:flex-end;opacity:.0}
+tr:hover td .acts{opacity:1}
+.bar{height:5px;border-radius:3px;background:var(--bg);width:110px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+textarea.input{resize:none;height:84px;font-family:ui-monospace,monospace;font-size:12px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:50}
+.modal-bg.on{display:grid}
+.modal{width:440px;padding:20px;background:var(--panel);border:1px solid var(--line2);border-radius:12px}
+.radio{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line2);border-radius:8px;margin-top:8px;cursor:pointer}
+.radio.on{border-color:var(--accent);background:var(--accent-bg)}
+.radio i{width:14px;height:14px;border-radius:50%;border:2px solid var(--faint);margin-top:2px;flex-shrink:0}
+.radio.on i{border-color:var(--accent);background:radial-gradient(var(--accent) 40%,transparent 45%)}
+
+/* ---- PREVIEW ---- */
+#preview{gap:0}
+.pv-main{flex:1;min-width:0;display:flex;flex-direction:column;padding:18px 22px;overflow:auto}
+.player{aspect-ratio:16/9;max-height:360px;width:100%;margin:0 auto;border-radius:var(--radius);position:relative;background:linear-gradient(135deg,#1e3a5f,#3b6ea5);display:grid;place-items:center}
+.player .play{width:54px;height:54px;border-radius:50%;background:rgba(0,0,0,.5);display:grid;place-items:center;font-size:20px}
+.player .tc{position:absolute;left:12px;bottom:10px;font-family:ui-monospace,monospace;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:4px}
+.player .vz{position:absolute;right:12px;top:10px}
+.transport{display:flex;align-items:center;gap:8px;justify-content:center;margin:12px 0}
+.strip{display:grid;grid-template-columns:repeat(12,1fr);gap:2px;height:48px;border-radius:6px;overflow:hidden}
+.timeline{position:relative;height:56px;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-top:6px}
+.seg-cut{position:absolute;top:8px;height:40px;border-radius:5px;padding:3px 7px;font-size:11px;overflow:hidden;white-space:nowrap}
+.seg-cut.fala{background:rgba(109,140,255,.25);border:1px solid var(--accent);color:var(--accent)}
+.seg-cut.cena{background:rgba(76,195,138,.2);border:1px solid var(--ok);color:var(--ok)}
+.seg-cut.manual{background:rgba(240,178,74,.22);border:1px solid var(--warn);color:var(--warn)}
+.seg-cut.prop{border-style:dashed;background:transparent}
+.seg-cut.cur{box-shadow:0 0 0 2px #fff3}
+.handle{position:absolute;top:0;bottom:0;width:4px;background:currentColor;cursor:ew-resize}
+.playhead{position:absolute;top:-4px;bottom:-4px;width:2px;background:#fff;left:34%}
+.playhead:before{content:"";position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#fff}
+.ruler{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:4px;font-family:ui-monospace,monospace}
+.pv-side{width:360px;flex-shrink:0;border-left:1px solid var(--line);background:var(--panel);padding:16px;overflow:auto}
+.cut{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--panel2);cursor:pointer}
+.cut.on{border-color:var(--accent)}
+.cut.prop{border-style:dashed}
+.cut .hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.cut .tm{font-family:ui-monospace,monospace;font-size:12px}
+.cut .nota{margin-top:7px;font-size:12px;color:var(--muted);background:var(--bg);border-radius:5px;padding:6px 8px}
+
+/* ---- ROTEIROS ---- */
+#roteiros{flex-direction:column}
+.rt-head{padding:16px 22px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.rt-body{display:flex;gap:0;flex:1;min-height:0}
+.rt-main{flex:1;min-width:0;padding:16px 22px 28px;overflow:auto}
+.rt-side{width:300px;flex-shrink:0;border-left:1px solid var(--line);padding:16px;background:var(--panel);overflow:auto}
+.part{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;display:flex}
+.part .grip{width:26px;display:grid;place-items:center;color:var(--faint);cursor:grab;border-right:1px solid var(--line)}
+.part .bd{flex:1;padding:12px 14px;min-width:0}
+.part .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.part.pinned{border-color:rgba(240,178,74,.55);background:linear-gradient(0deg,var(--panel),var(--panel)) padding-box}
+.part .txt{font-size:14px;line-height:1.55;padding:2px 0}
+.part .dir{margin-top:8px;padding:7px 10px;border-left:3px solid var(--ia);background:var(--ia-bg);border-radius:0 6px 6px 0;color:var(--muted);font-size:12px}
+.part .dir b{color:var(--ia);font-weight:500}
+.add{border:1px dashed var(--line2);border-radius:10px;padding:12px;text-align:center;color:var(--muted)}
+.add .chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.vers{display:flex;gap:14px}
+.ver{padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--panel2);cursor:pointer}
+.ver.on{border-color:var(--accent)}
+.ver .t{display:flex;justify-content:space-between;align-items:center}
+.diff-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dpart{padding:10px 12px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px;background:var(--panel);font-size:13px}
+.dpart.add{border:1px solid var(--ok);background:var(--ok-bg);text-align:left;color:var(--text)}
+.dpart.del{border-color:var(--bad);background:var(--bad-bg);text-decoration:line-through;text-decoration-color:rgba(239,107,107,.6)}
+.dpart.chg{border-color:var(--warn);background:var(--warn-bg)}
+.dpart small{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;text-decoration:none}
+mark{background:rgba(240,178,74,.3);color:inherit;border-radius:3px;padding:0 2px}
+
+/* ---- PROJETOS ---- */
+#projetos{gap:0}
+.pj-main{flex:1;min-width:0;padding:18px 22px;overflow:auto}
+.pj-side{width:480px;flex-shrink:0;border-left:1px solid var(--line);background:var(--panel);padding:18px;overflow:auto}
+.pj{padding:14px;margin-bottom:10px;cursor:pointer;display:flex;gap:14px}
+.pj.on{border-color:var(--accent)}
+.pj .th{width:130px;flex-shrink:0}
+.pj .info{flex:1;min-width:0}
+.pj h4{font-size:13.5px;margin-bottom:3px}
+.pj .meta{color:var(--muted);font-size:12px;margin-bottom:8px}
+.alert{display:flex;gap:10px;align-items:center;padding:8px 10px;background:var(--warn-bg);border:1px solid rgba(240,178,74,.4);border-radius:6px;color:var(--warn);font-size:12px}
+.diffrow{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.diffrow .ic{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;font-size:12px;font-weight:700}
+.ic.m{background:var(--warn-bg);color:var(--warn)} .ic.a{background:var(--ok-bg);color:var(--ok)} .ic.r{background:var(--bad-bg);color:var(--bad)}
+.dir-btns{display:flex;gap:2px}
+.dir-btns button{padding:3px 8px;font-size:11px;border:1px solid var(--line2);color:var(--muted)}
+.dir-btns button:first-child{border-radius:5px 0 0 5px}
+.dir-btns button:last-child{border-radius:0 5px 5px 0;border-left:none}
+.dir-btns button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.safe{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}
+.safe li{list-style:none;display:flex;gap:8px;padding:3px 0;color:var(--muted);font-size:12px}
+.safe li i{font-style:normal;color:var(--ok)}
+
+.chip.pasta{background:rgba(95,194,184,.12);border-color:rgba(95,194,184,.5);color:#5fc2b8}
+.chip small{font-size:10.5px;color:var(--muted)}
+.filters{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.flbl{width:84px;flex-shrink:0;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.step{cursor:pointer}.step small{margin-left:6px;color:var(--faint)}
+.info{padding:8px 10px;border:1px solid var(--line);background:var(--panel2);border-radius:6px;color:var(--muted);font-size:12px;margin-bottom:14px}
+.info b{color:var(--text);font-weight:500}
+.tree{font-family:ui-monospace,monospace;font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0}
+.tree div{display:flex;align-items:center;gap:8px;padding:3px 0}
+.tree .ind{padding-left:20px}
+.tree .arrow{color:var(--faint)}
+.chk{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12.5px}
+.chk input{margin-top:3px;accent-color:var(--accent)}
+.imgph{aspect-ratio:4/3;border-radius:6px;position:relative}
+.imgph .badge{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.7);font-size:10.5px;padding:0 6px;border-radius:3px}
+/* preview library */
+.lib{width:290px;flex-shrink:0;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+.lib-top{padding:14px 14px 4px;overflow:auto;flex-shrink:0;max-height:48%}
+.fl{font-size:10.5px;color:var(--faint);margin:8px 0 4px}
+.fl+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chips .chip{font-size:11px;padding:1px 8px}
+.vlist{flex:1;overflow:auto;padding:6px 10px;border-top:1px solid var(--line)}
+.vi{display:flex;gap:9px;align-items:center;padding:7px;border-radius:7px;border:1px solid transparent;cursor:pointer;margin-bottom:3px}
+.vi:hover{background:var(--panel2)}
+.vi.on{background:var(--accent-bg);border-color:var(--accent)}
+.vi input{accent-color:var(--accent)}
+.vi .vn{min-width:0;flex:1}
+.vi .vn b{display:block;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vi .vn .muted{font-size:11px}
+.vi .vt{display:flex;gap:4px;margin-top:3px}
+.vi .vt .chip{font-size:10px;padding:0 6px}
+.selbar{border-top:1px solid var(--line);padding:10px 12px;background:var(--panel2)}
+.vgroup{margin-bottom:14px}
+.vgroup .vh{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:var(--bg);border-radius:6px}
+.tagline{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px}
+.tagline .lb{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.inh{opacity:.55}
+/* roteiros */
+.rt-list{width:250px;flex-shrink:0;border-right:1px solid var(--line);padding:14px;background:var(--panel);overflow:auto}
+.rl{padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--panel2);cursor:pointer}
+.rl.on{border-color:var(--accent)}
+.rl b{display:block;font-size:12.5px;margin-bottom:3px}
+.ed{outline:none;border-radius:5px;padding:2px 6px;margin:0 -6px;cursor:text;border:1px solid transparent}
+.ed:hover{border-color:var(--line2)}
+.ed:focus{border-color:var(--accent);background:var(--bg)}
+.part select.sel-type,.typesel{background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:1px 8px;font-size:11.5px}
+.attach-bd{display:flex;gap:14px}
+.attach-bd .th{width:170px;flex-shrink:0;align-self:flex-start}
+.attach-bd .col{flex:1;min-width:0}
+.add .chips{gap:8px}
+.add .chips .chip{font-size:12px;padding:4px 12px}
+.add .chips .chip.main{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.ready li{list-style:none;display:flex;gap:8px;padding:3px 0;font-size:12px;color:var(--muted)}
+.ready li i{font-style:normal;width:14px}
+.ready .ok i{color:var(--ok)}.ready .wn i{color:var(--warn)}
+/* projeto editor */
+.pjview{display:none;flex:1;min-width:0}
+.pjview.on{display:flex}
+.pe-left{width:310px;flex-shrink:0;border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px}
+.pe-main{flex:1;min-width:0;padding:16px 20px;overflow:auto}
+.pe-right{width:380px;flex-shrink:0;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:16px}
+.mom{padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--panel2);cursor:pointer}
+.mom.on{border-color:var(--accent);background:var(--accent-bg)}
+.mom .t{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.mom p{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tracks{position:relative;border:1px solid var(--line);border-radius:6px;background:var(--panel);margin-top:10px}
+.trk{display:flex;height:34px;border-bottom:1px solid var(--line)}
+.trk:last-child{border-bottom:none}
+.trk .tn{width:100px;flex-shrink:0;font-size:11px;color:var(--muted);padding:9px 10px;border-right:1px solid var(--line)}
+.trk .tb{position:relative;flex:1}
+.blk{position:absolute;top:4px;bottom:4px;border-radius:4px;font-size:10.5px;padding:3px 6px;overflow:hidden;white-space:nowrap;border:1px solid}
+.blk.v{background:rgba(109,140,255,.22);border-color:var(--accent);color:var(--accent)}
+.blk.br{background:rgba(76,195,138,.2);border-color:var(--ok);color:var(--ok)}
+.blk.mo{background:rgba(181,140,255,.2);border-color:var(--ia);color:var(--ia)}
+.blk.lg{background:rgba(139,147,167,.15);border-color:var(--muted);color:var(--muted)}
+.blk.tx{background:rgba(240,178,74,.2);border-color:var(--warn);color:var(--warn)}
+.blk.sx{background:rgba(239,107,107,.18);border-color:var(--bad);color:var(--bad)}
+.blk.prop{background:transparent;border-style:dashed}
+.selrange{position:absolute;top:0;bottom:0;left:calc(100px + (100% - 100px)*.125);width:calc((100% - 100px)*.219);background:rgba(255,255,255,.05);border-left:1px solid #fff4;border-right:1px solid #fff4;pointer-events:none}
+.ph2{position:absolute;top:-4px;bottom:-4px;left:calc(100px + (100% - 100px)*.2);width:2px;background:#fff}
+.cand{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--panel2);display:flex;gap:10px}
+.cand.ap{border-color:var(--ok)}
+.cand .row{flex-wrap:wrap;gap:4px 8px}
+.cand b{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cand .th{width:110px;flex-shrink:0;align-self:flex-start}
+.cand .why{font-size:11.5px;color:var(--muted);margin:4px 0}
+.cand .why b{color:var(--text);font-weight:500}
+.sec-h{display:flex;align-items:center;gap:8px;margin:14px 0 8px}
+.sec-h h4{font-size:13px}
+.sfxrow{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:12px;padding:10px;border:1px dashed var(--ia);border-radius:8px;background:var(--ia-bg)}
+.slider{height:4px;border-radius:2px;background:var(--bg);position:relative;margin-top:7px}
+.slider i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--ia)}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px}
+.banner{position:fixed;right:14px;bottom:12px;background:var(--panel2);border:1px solid var(--line2);padding:5px 12px;border-radius:20px;font-size:11px;color:var(--muted);z-index:9}
+</style>
+</head>
+<body>
+
+<aside class="side">
+  <div class="brand"><div class="logo">NG3</div><div><b>Painel NG3</b><span>Automação de vídeo</span></div></div>
+  <div class="marca"><span>Marca</span><b>BCN Intercâmbio ▾</b></div>
+  <nav class="nav">
+    <button data-go="importar" class="on">Importar <span class="count hot">12</span></button>
+    <button data-go="tags">Tags da marca <span class="count">38</span></button>
+    <button data-go="preview">Preview e cortes</button>
+    <button data-go="roteiros">Roteiros</button>
+    <button data-go="projetos">Projetos <span class="count hot">1</span></button>
+    <small>Outras abas</small>
+    <button class="dim">Plugins</button>
+    <button class="dim">Tema</button>
+  </nav>
+  <div class="foot">Mockup · sem funcionalidades<br>fase import, voz e roteiros</div>
+</aside>
+
+<main>
+<header class="top">
+  <h2 id="ttl">Importar<span class="sub">Fila de revisão e tags</span></h2>
+  <div class="actions" id="topact"></div>
+</header>
+
+<!-- ========== IMPORTAR ========== -->
+<section class="screen on" id="importar">
+  <div class="import-main">
+    <div class="toolbar">
+      <button class="btn pri" id="impBtn">+ Importar pasta</button>
+      <div class="seg" id="mediaSeg"><button class="on" data-m="v">Vídeos <span class="muted">12</span></button><button data-m="i">Imagens <span class="muted">8</span></button></div>
+      <div class="sp"></div>
+      <div class="seg"><button class="on">Todos</button><button>Sem tag 5</button><button>Revisados 3</button></div>
+      <button class="btn ghost" id="selAll">Selecionar tudo</button>
+    </div>
+
+    <div class="filters"><span class="flbl">Importação</span>
+      <span class="chip sel">Todas · 20</span>
+      <span class="chip">Viagem_Nov_2026 · 14 <small>hoje 09:12</small></span>
+      <span class="chip">Torneio_Sub17 · 6 <small>08 nov</small></span>
+    </div>
+    <div class="filters"><span class="flbl">Passo</span>
+      <div class="pipeline" style="margin:0">
+        <div class="step"><b>1</b>Importado<small>20</small></div>
+        <div class="step cur"><b>2</b>Fila de revisão<small>12</small></div>
+        <div class="step"><b>3</b>Com tags<small>8</small></div>
+        <div class="step"><b>4</b>Com cortes<small>5</small></div>
+        <div class="step"><b>5</b>No roteiro<small>3</small></div>
+      </div>
+    </div>
+    <div class="filters"><span class="flbl">Subpastas</span>
+      <span class="chip pasta">/Treino <small>5</small></span><span class="chip pasta">/Jogos <small>4</small></span><span class="chip pasta">/Hotel <small>2</small></span><span class="chip pasta">/Aeroporto <small>3</small></span><span class="chip pasta">/Cerimônia <small>2</small></span><span class="chip pasta">/Fotos <small>8</small></span>
+      <span class="muted" style="font-size:11.5px;margin-left:6px">o nome da subpasta vira tag automaticamente</span>
+    </div>
+    <div style="height:6px"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <aside class="import-side">
+    <div class="row" style="margin-bottom:12px"><h3 style="font-size:14px">Tags do import</h3><div class="sp"></div><span class="chip sel" id="selCount">3 selecionados</span></div>
+    <div class="info">Estas tags valem para a <b>mídia inteira</b>. Cada corte tem tags próprias, independentes, em <b>Preview e cortes</b>. Imagens só têm tag no arquivo.</div>
+
+    <span class="lbl">Aplicar a N selecionados</span>
+    <div class="acc" style="margin-bottom:16px">
+      <input class="input" placeholder="Tag livre… (ex.: treino sub-15)" value="treino">
+      <div class="ac-list">
+        <div>treino sub-15 <span>Atividade · 14</span></div>
+        <div>treino de finalização <span>Atividade · 6</span></div>
+        <div>treino físico <span>Atividade · 3</span></div>
+        <div style="color:var(--accent)">+ Criar tag livre "treino" <span>livre</span></div>
+      </div>
+    </div>
+    <div style="height:136px"></div>
+
+    <div class="tagcat"><span class="lbl">Das subpastas (automáticas)</span><div class="chips"><span class="chip pasta">/Treino</span><span class="chip pasta">/Jogos</span><span class="chip pasta">/Hotel</span><span class="chip pasta">/Aeroporto</span><span class="chip pasta">/Cerimônia</span></div></div>
+    <div class="tagcat"><span class="lbl">Local</span><div class="chips"><span class="chip sel">Camp Nou</span><span class="chip">CT Barcelona</span><span class="chip">Estádio</span><span class="chip">Hotel</span><span class="chip">Cidade</span></div></div>
+    <div class="tagcat"><span class="lbl">Atividade</span><div class="chips"><span class="chip">Treino</span><span class="chip sel">Jogo</span><span class="chip">Torneio</span><span class="chip">Cerimônia</span><span class="chip">Passeio</span></div></div>
+    <div class="tagcat"><span class="lbl">Pessoas</span><div class="chips"><span class="chip">Atletas</span><span class="chip">Treinador</span><span class="chip">Famílias</span><span class="chip">Depoimento</span></div></div>
+    <div class="tagcat"><span class="lbl">Livres (não categorizadas)</span><div class="chips"><span class="chip mut">#golaço</span><span class="chip mut">#chegada</span></div></div>
+
+    <div class="row" style="margin-top:16px"><button class="btn sp">Limpar seleção</button><button class="btn pri sp">Marcar como revisado</button></div>
+  </aside>
+</section>
+
+<!-- ========== TAGS ========== -->
+<section class="screen" id="tags">
+  <div class="cats">
+    <span class="lbl" style="padding:0 10px">Categorias</span>
+    <div class="cat on"><span>Todas</span><span class="n">38</span></div>
+    <div class="cat"><span>Local</span><span class="n">8</span></div>
+    <div class="cat"><span>Atividade</span><span class="n">11</span></div>
+    <div class="cat"><span>Pessoas</span><span class="n">7</span></div>
+    <div class="cat"><span>Clima / luz</span><span class="n">4</span></div>
+    <div class="cat"><span>Emoção</span><span class="n">5</span></div>
+    <div class="cat"><span>Livres</span><span class="n">3</span></div>
+    <div style="margin-top:12px"><button class="btn sm" style="width:100%">+ Nova categoria</button></div>
+  </div>
+  <div class="tag-main">
+    <div class="toolbar">
+      <input class="input" style="max-width:280px" placeholder="Buscar tag…">
+      <div class="sp"></div>
+      <button class="btn">Fundir selecionadas</button>
+      <button class="btn pri">+ Nova tag</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th style="width:30px"></th><th>Tag</th><th>Categoria</th><th>Origem</th><th>Usos</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><input type="checkbox"></td><td><b>Treino</b> <span class="muted mono">· treino</span></td><td>Atividade</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:82%"></i></div>64</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox" checked></td><td><b>Jogo</b> <span class="muted mono">· jogo</span></td><td>Atividade</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:60%"></i></div>47</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Camp Nou</b> <span class="muted mono">· camp-nou</span></td><td>Local</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:44%"></i></div>35</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Atletas</b> <span class="muted mono">· atletas</span></td><td>Pessoas</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:72%"></i></div>58</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox" checked></td><td><b>Golaço</b> <span class="muted mono">· golaco</span></td><td><span class="muted">Sem categoria</span></td><td><span class="chip warn">livre</span></td><td><div class="row"><div class="bar"><i style="width:14%"></i></div>11</div></td><td><div class="acts"><button class="btn sm">Categorizar</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Chegada</b> <span class="muted mono">· chegada</span></td><td><span class="muted">Sem categoria</span></td><td><span class="chip warn">livre</span></td><td><div class="row"><div class="bar"><i style="width:9%"></i></div>7</div></td><td><div class="acts"><button class="btn sm">Categorizar</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Aeroporto</b> <span class="muted mono">· aeroporto</span></td><td>Local</td><td><span class="chip pasta">pasta</span></td><td><div class="row"><div class="bar"><i style="width:18%"></i></div>14</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Pôr do sol</b> <span class="muted mono">· por-do-sol</span></td><td>Clima / luz</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:20%"></i></div>16</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+          <tr><td><input type="checkbox"></td><td><b>Comemoração</b> <span class="muted mono">· comemoracao</span></td><td>Emoção</td><td><span class="chip mut">marca</span></td><td><div class="row"><div class="bar"><i style="width:31%"></i></div>24</div></td><td><div class="acts"><button class="btn sm">Renomear</button><button class="btn sm">Fundir</button><button class="btn sm danger rm">Remover</button></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:10px">Origem "pasta" = criada automaticamente pelo nome da subpasta no import. Renomear mantém o slug e todas as marcações. Passe o mouse na linha para ver as ações.</p>
+  </div>
+  <aside class="tag-side">
+    <span class="lbl">Criar em lote</span>
+    <textarea class="input" placeholder="Uma tag por linha.&#10;Use Categoria: tag para já categorizar.">Local: Aeroporto
+Local: Metrô
+Emoção: Emoção da família</textarea>
+    <div class="row" style="margin-top:8px"><span class="muted">3 tags a criar</span><div class="sp"></div><button class="btn pri">Criar</button></div>
+  </aside>
+</section>
+
+<!-- ========== PREVIEW ========== -->
+<section class="screen" id="preview">
+  <aside class="lib">
+    <div class="lib-top">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:14px">Vídeos</h3><span class="chip mut">12</span><div class="sp"></div><button class="btn sm" id="libAll">Selecionar todos</button></div>
+      <input class="input" placeholder="Buscar vídeo…">
+      <span class="lbl" style="margin:12px 0 0">Filtrar por tags</span>
+      <div class="seg" style="margin-top:6px"><button>Do vídeo</button><button>Dos cortes</button><button class="on">Ambos</button></div>
+      <div class="fl">Categorias da marca</div><div class="chips"><span class="chip sel">Treino</span><span class="chip">Jogo</span><span class="chip">Atletas</span><span class="chip">Camp Nou</span><span class="chip">Comemoração</span><span class="chip">+ 33</span></div>
+      <div class="fl">Subpastas</div><div class="chips"><span class="chip pasta">/Treino</span><span class="chip pasta">/Jogos</span><span class="chip pasta">/Hotel</span></div>
+      <div class="fl">Livres</div><div class="chips"><span class="chip mut">#golaço</span><span class="chip mut">#chegada</span></div>
+      <div class="fl">Tipo de corte</div><div class="chips"><span class="chip">fala</span><span class="chip">cena</span><span class="chip">manual</span><span class="chip">propostos</span></div>
+    </div>
+    <div class="vlist" id="vlist"></div>
+    <div class="selbar">
+      <div class="row" style="margin-bottom:8px"><b id="libCount">3 selecionados</b><span class="muted">· 12 cortes</span></div>
+      <div class="row"><button class="btn sm sp" id="goMany">Gerir cortes</button><button class="btn sm sp">Aplicar tag aos cortes</button></div>
+    </div>
+  </aside>
+
+  <div class="pv-main">
+    <div class="row" style="margin-bottom:8px">
+      <h3 style="font-size:14px" id="pvName">treino_sub15_camp-nou_03.mp4</h3>
+      <span class="chip mut">indexado</span><span class="chip ok">transcrito</span><span class="chip sel">cortado</span>
+      <div class="sp"></div><button class="btn sm">Abrir arquivo</button>
+    </div>
+    <div class="tagline" style="margin-bottom:12px"><span class="lb">Vídeo inteiro</span><span class="chip">Treino</span><span class="chip">Atletas</span><span class="chip pasta">/Treino</span><span class="chip mut">+ tag</span></div>
+    <div class="player">
+      <div class="play">▶</div>
+      <span class="vz chip">Voz separada · música detectada</span>
+      <span class="tc">00:14.2 / 01:12.0</span>
+    </div>
+    <div class="transport">
+      <button class="btn sm">⏮</button><button class="btn sm">◀ 1 quadro</button><button class="btn pri sm">▶ Tocar</button><button class="btn sm">1 quadro ▶</button><button class="btn sm">⏭</button>
+      <span style="width:20px"></span>
+      <button class="btn sm"><span class="kbd">I</span> Entrada</button><button class="btn sm"><span class="kbd">O</span> Saída</button>
+    </div>
+    <span class="lbl">Tira de quadros</span>
+    <div class="strip">
+      <div class="g1"></div><div class="g1"></div><div class="g5"></div><div class="g5"></div><div class="g2"></div><div class="g2"></div><div class="g2"></div><div class="g6"></div><div class="g6"></div><div class="g4"></div><div class="g4"></div><div class="g8"></div>
+    </div>
+    <div class="timeline" id="tl">
+      <div class="seg-cut fala" style="left:2%;width:15%">fala 1<span class="handle" style="left:0"></span><span class="handle" style="right:0"></span></div>
+      <div class="seg-cut fala prop cur" style="left:19%;width:22%">fala 2 · proposto<span class="handle" style="left:0"></span><span class="handle" style="right:0"></span></div>
+      <div class="seg-cut cena prop" style="left:44%;width:12%">cena · proposto</div>
+      <div class="seg-cut manual" style="left:58%;width:17%">manual<span class="handle" style="left:0"></span><span class="handle" style="right:0"></span></div>
+      <div class="seg-cut cena prop" style="left:78%;width:18%">cena · proposto</div>
+      <div class="playhead"></div>
+    </div>
+    <div class="ruler"><span>00:00</span><span>00:18</span><span>00:36</span><span>00:54</span><span>01:12</span></div>
+    <div class="row" style="margin-top:12px;gap:14px;color:var(--muted);font-size:12px">
+      <span class="chip" style="border-color:var(--accent);color:var(--accent)">fala</span>
+      <span class="chip" style="border-color:var(--ok);color:var(--ok)">cena</span>
+      <span class="chip" style="border-color:var(--warn);color:var(--warn)">manual</span>
+      <span>Tracejado = proposto. Cortes são anotações, o arquivo não muda.</span>
+    </div>
+  </div>
+
+  <aside class="pv-side">
+    <div class="seg" id="pvSeg" style="margin-bottom:12px;width:100%"><button class="on" data-v="one" style="flex:1">Este vídeo · 5</button><button data-v="many" style="flex:1">Selecionados · 12</button></div>
+
+    <div id="pvOne">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:14px">Cortes</h3><div class="sp"></div><button class="btn sm">Aceitar todos propostos</button></div>
+      <div class="info" style="margin-bottom:10px">Tags do corte são <b>independentes</b> das do vídeo. As do vídeo aparecem apagadas e só valem se você copiar.</div>
+      <div class="cut"><div class="hd"><span class="chip sel">fala</span><span class="tm">00:01.4 → 00:12.8</span><div class="sp"></div><span class="chip ok">aceito</span></div><div class="tagline"><span class="lb">Corte</span><span class="chip">Atletas</span><span class="chip">Treino</span></div></div>
+      <div class="cut on prop"><div class="hd"><span class="chip sel">fala</span><span class="tm">00:13.9 → 00:29.5</span><div class="sp"></div><span class="chip ia">proposto</span></div>
+        <div class="tagline"><span class="lb">Corte</span><span class="chip">Treinador</span><span class="chip">Depoimento</span><span class="chip ia">+ Motivação</span><button class="chip mut">+ tag</button></div>
+        <div class="tagline inh" style="margin-top:6px"><span class="lb">Vídeo</span><span class="chip">Treino</span><span class="chip">Atletas</span><button class="chip mut">copiar para o corte</button></div>
+        <div class="cut nota"><span class="lbl" style="margin:0 0 3px">Nota do corte</span>Treinador explicando o objetivo do treino. Bom para abertura.</div>
+        <div class="row" style="margin-top:8px"><button class="btn sm">Ajustar bordas</button><button class="btn sm ok">Aceitar</button><button class="btn sm ghost danger">Descartar</button></div>
+      </div>
+      <div class="cut prop"><div class="hd"><span class="chip ok">cena</span><span class="tm">00:31.8 → 00:40.2</span><div class="sp"></div><span class="chip ia">proposto</span></div><div class="tagline"><span class="lb">Corte</span><span class="chip">Camp Nou</span></div></div>
+      <div class="cut"><div class="hd"><span class="chip warn">manual</span><span class="tm">00:41.5 → 00:53.0</span><div class="sp"></div><span class="chip mut">protegido</span></div><div class="tagline"><span class="lb">Corte</span><span class="chip">Comemoração</span><span class="chip mut">#golaço</span></div><div class="cut nota">Corte manual: nunca é sobrescrito ao reprocessar.</div></div>
+      <div class="cut prop"><div class="hd"><span class="chip ok">cena</span><span class="tm">00:56.1 → 01:09.7</span><div class="sp"></div><span class="chip ia">proposto</span></div><div class="tagline"><span class="lb">Corte</span><span class="chip">Pôr do sol</span></div></div>
+      <div class="divider"></div>
+      <button class="btn pri" style="width:100%">Criar roteiro a partir dos cortes aceitos</button>
+    </div>
+
+    <div id="pvMany" style="display:none">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:14px">Cortes dos selecionados</h3><div class="sp"></div><span class="chip sel">3 vídeos · 12 cortes</span></div>
+      <div class="row" style="margin-bottom:12px"><button class="btn sm">Aceitar propostos</button><button class="btn sm">Aplicar tag…</button><button class="btn sm">Usar no roteiro</button></div>
+
+      <div class="vgroup"><div class="vh"><div class="th g2" style="width:44px"></div><b style="font-size:12px;flex:1">treino_sub15_camp-nou_03</b><span class="chip mut">5</span></div>
+        <div class="cut"><div class="hd"><input type="checkbox" checked><span class="chip sel">fala</span><span class="tm">00:01 → 00:12</span><span class="sp"></span><span class="chip ok">aceito</span></div><div class="tagline"><span class="chip">Atletas</span><span class="chip">Treino</span></div></div>
+        <div class="cut prop"><div class="hd"><input type="checkbox" checked><span class="chip sel">fala</span><span class="tm">00:13 → 00:29</span><span class="sp"></span><span class="chip ia">proposto</span></div><div class="tagline"><span class="chip">Treinador</span><span class="chip ia">+ Motivação</span></div></div>
+        <button class="btn sm ghost">ver mais 3</button></div>
+      <div class="vgroup"><div class="vh"><div class="th g6" style="width:44px"></div><b style="font-size:12px;flex:1">gol_golaço_sub17</b><span class="chip mut">3</span></div>
+        <div class="cut"><div class="hd"><input type="checkbox" checked><span class="chip warn">manual</span><span class="tm">00:04 → 00:11</span><span class="sp"></span><span class="chip mut">protegido</span></div><div class="tagline"><span class="chip">Gol</span><span class="chip">Comemoração</span></div></div>
+        <button class="btn sm ghost">ver mais 2</button></div>
+      <div class="vgroup"><div class="vh"><div class="th g2" style="width:44px"></div><b style="font-size:12px;flex:1">treino_goleiros_02</b><span class="chip mut">4</span></div>
+        <div class="cut prop"><div class="hd"><input type="checkbox" checked><span class="chip ok">cena</span><span class="tm">00:20 → 00:33</span><span class="sp"></span><span class="chip ia">proposto</span></div><div class="tagline"><span class="chip">Goleiro</span><span class="chip">Treino</span></div></div>
+        <button class="btn sm ghost">ver mais 3</button></div>
+    </div>
+  </aside>
+</section>
+
+<!-- ========== ROTEIROS ========== -->
+<section class="screen" id="roteiros">
+  <div class="rt-head">
+    <div>
+      <div class="row" style="margin-bottom:6px"><h3 style="font-size:16px"><span class="ed" contenteditable="true">Chegada em Barcelona · 30s</span></h3><span class="chip warn">rascunho</span><span class="chip mut">v5</span></div>
+      <span class="muted">Começou de: <b style="color:var(--text);font-weight:500">ideia da IA</b> · salvo há 2 min · clique em qualquer texto para editar</span>
+    </div>
+    <div class="row">
+      <div class="seg" id="rtView"><button class="on" data-v="ed">Editor</button><button data-v="vs">Versões</button></div>
+      <button class="btn">Abrir no FilmCraft ↗</button>
+      <button class="btn ok" id="aprBtn">Aprovar e gerar projeto…</button>
+    </div>
+  </div>
+
+  <div class="rt-body" id="rtEd">
+    <aside class="rt-list">
+      <div class="row" style="margin-bottom:10px"><h3 style="font-size:14px">Roteiros</h3><span class="chip mut">4</span><div class="sp"></div><button class="btn sm pri">+ Novo</button></div>
+      <input class="input" placeholder="Buscar roteiro…" style="margin-bottom:8px">
+      <div class="seg" style="margin-bottom:10px"><button class="on">Todos</button><button>Rascunho</button><button>Aprovado</button></div>
+      <div class="rl on"><b>Chegada em Barcelona · 30s</b><span class="chip warn">rascunho</span> <span class="chip mut">v5</span></div>
+      <div class="rl"><b>Torneio Sub-17 · 45s</b><span class="chip ok">projeto gerado</span> <span class="chip mut">v2</span></div>
+      <div class="rl"><b>Depoimento família Silva · 60s</b><span class="chip sel">aprovado</span> <span class="chip mut">v3</span></div>
+      <div class="rl"><b>Treino de goleiros · 20s</b><span class="chip sel">aprovado</span> <span class="chip mut">v2</span></div>
+      <div class="divider"></div>
+      <button class="btn sm" style="width:100%;margin-bottom:6px">Duplicar roteiro</button>
+      <button class="btn sm" style="width:100%">Importar texto / colar roteiro</button>
+    </aside>
+
+    <div class="rt-main">
+      <div class="part pinned"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>Abertura</option><option>Fala</option></select><span class="mono muted ed" contenteditable="true">00:00 – 00:04</span><div class="sp"></div><span class="chip warn">Parte fixa</span><button class="btn sm">Desafixar</button></div>
+        <div class="txt ed" contenteditable="true">O sonho de todo garoto que ama futebol começa aqui.</div>
+        <div class="dir"><b>Direção:</b> <span class="ed" contenteditable="true">voz calma, câmera lenta no portão do Camp Nou.</span></div>
+      </div></div>
+
+      <div class="part"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>Fala</option><option>Abertura</option></select><span class="mono muted ed" contenteditable="true">00:04 – 00:11</span><div class="sp"></div><button class="btn sm">Fixar</button><button class="btn sm">Reescrever parte</button><button class="btn sm ghost">⋯</button></div>
+        <div class="txt ed" contenteditable="true">Todo ano, atletas brasileiros embarcam para treinar com clubes da Catalunha e disputar torneios internacionais.</div>
+        <div class="dir"><b>Direção:</b> <span class="ed" contenteditable="true">trocar o b-roll de aeroporto por chegada da turma.</span></div>
+      </div></div>
+
+      <div class="part"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>B-roll</option></select><span class="mono muted ed" contenteditable="true">00:11 – 00:16</span><div class="sp"></div><span class="chip ia">2 recomendações</span><button class="btn sm">Fixar</button><button class="btn sm ghost">⋯</button></div>
+        <div style="display:flex;gap:8px;margin:2px 0"><div class="th g1" style="width:120px"><span class="dur">0:05</span></div><div class="th g2" style="width:120px"><span class="dur">0:04</span></div><div class="th g6" style="width:120px"><span class="dur">0:06</span></div></div>
+        <div class="row" style="margin-top:6px"><span class="chip">Treino</span><span class="chip">Atletas</span></div>
+      </div></div>
+
+      <div class="part"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>Vídeo anexado</option></select><span class="mono muted ed" contenteditable="true">00:16 – 00:22</span><div class="sp"></div><button class="btn sm">Fixar</button><button class="btn sm">Trocar vídeo</button><button class="btn sm ghost">⋯</button></div>
+        <div class="attach-bd">
+          <div class="th g4"><span class="dur">0:06</span></div>
+          <div class="col">
+            <div class="muted" style="margin-bottom:6px">depoimento_pai_silva.mp4 · trecho 00:12 → 00:18</div>
+            <span class="lbl" style="margin-bottom:3px">Fala transcrita (editável)</span>
+            <div class="txt ed" contenteditable="true" style="font-size:13px">"Meu filho voltou outra pessoa, mais maduro e muito mais confiante."</div>
+            <span class="lbl" style="margin:8px 0 3px">Texto detectado no vídeo</span>
+            <div class="txt ed" contenteditable="true" style="font-size:13px;color:var(--warn)">Família Silva · São Paulo</div>
+            <div class="row" style="margin-top:8px"><label class="chk" style="padding:0"><input type="checkbox" checked> Manter áudio original</label><label class="chk" style="padding:0"><input type="checkbox"> Legendar a fala</label></div>
+          </div>
+        </div>
+      </div></div>
+
+      <div class="part"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>Texto na tela</option></select><span class="mono muted ed" contenteditable="true">00:22 – 00:26</span><div class="sp"></div><button class="btn sm">Fixar</button><button class="btn sm">Reescrever parte</button><button class="btn sm ghost">⋯</button></div>
+        <div class="txt ed" contenteditable="true" style="font-weight:600;letter-spacing:.02em">+ de 300 atletas já viveram essa experiência</div>
+      </div></div>
+
+      <div class="part"><div class="grip">⋮⋮</div><div class="bd">
+        <div class="hd"><select class="typesel"><option>Encerramento</option></select><span class="mono muted ed" contenteditable="true">00:26 – 00:32</span><div class="sp"></div><button class="btn sm">Fixar</button><button class="btn sm">Reescrever parte</button><button class="btn sm ghost">⋯</button></div>
+        <div class="txt ed" contenteditable="true">Sua história no futebol europeu pode começar na próxima temporada. Fale com a BCN Intercâmbio.</div>
+        <div class="dir"><b>Direção:</b> <span class="ed muted" contenteditable="true">adicionar nota de direção…</span></div>
+      </div></div>
+
+      <div class="add">Adicionar parte
+        <div class="chips"><span class="chip main">+ Anexar vídeo (com fala / texto)</span><span class="chip main">+ Texto novo</span><span class="chip">+ Fala</span><span class="chip">+ B-roll</span><span class="chip">+ Motion</span><span class="chip">+ Texto na tela</span><span class="chip">+ Pausa</span><span class="chip">+ Parte livre</span></div>
+      </div>
+    </div>
+
+    <aside class="rt-side">
+      <span class="lbl">Começar de</span>
+      <div class="seg" style="margin-bottom:12px"><button class="on">Ideia IA</button><button>Texto</button><button>Cortes</button><button>Vídeo</button></div>
+      <span class="lbl">Resumo</span>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px 10px;margin-bottom:14px"><span class="muted">Partes</span><b>6</b><span class="muted">Duração total</span><b>0:32</b><span class="muted">Partes fixas</span><b>1</b><span class="muted">Vídeos anexados</span><b>1</b><span class="muted">Cortes usados</span><b>3</b></div>
+      <div class="divider"></div>
+      <span class="lbl">Pronto para aprovar?</span>
+      <ul class="ready">
+        <li class="ok"><i>✓</i> Todas as partes têm texto</li>
+        <li class="ok"><i>✓</i> Duração dentro do alvo (30s ±3)</li>
+        <li class="wn"><i>!</i> 2 partes sem b-roll recomendado</li>
+        <li class="wn"><i>!</i> Vídeo anexado sem legenda</li>
+      </ul>
+      <div class="divider"></div>
+      <span class="lbl">Abrir no FilmCraft</span>
+      <p class="muted" style="margin-bottom:8px">Abre o projeto no tempo da parte selecionada. Se o CLI não aceitar <span class="mono">--seek</span>, abre só o projeto.</p>
+      <button class="btn" style="width:100%">Abrir na parte "Fala" · 00:04 ↗</button>
+      <div class="divider"></div>
+      <p class="muted">Aprovar não trava o roteiro. Cada mudança depois passa pela sincronia.</p>
+    </aside>
+  </div>
+
+  <div class="rt-body" id="rtVs" style="display:none">
+    <div class="rt-main">
+      <div class="row" style="margin-bottom:12px"><h3 style="font-size:14px">Comparando <span class="chip mut">v3</span> com <span class="chip sel">v5 atual</span></h3><div class="sp"></div><span class="chip ok">+1 parte</span><span class="chip warn">2 alteradas</span><span class="chip bad">−1 removida</span></div>
+      <div class="diff-cols">
+        <div><span class="lbl">v3 · ontem 17:42</span>
+          <div class="dpart"><small>Abertura</small>Todo garoto sonha com o futebol europeu.</div>
+          <div class="dpart chg"><small>Fala · alterada</small>Todo ano, atletas brasileiros viajam para treinar com <mark>clubes da Espanha</mark>.</div>
+          <div class="dpart del"><small>Fala · removida</small>Depoimento de um pai sobre a viagem.</div>
+          <div class="dpart"><small>Encerramento</small>Fale com a BCN Intercâmbio.</div>
+        </div>
+        <div><span class="lbl">v5 · hoje 11:08</span>
+          <div class="dpart chg"><small>Abertura · alterada</small><mark>O sonho de todo garoto que ama futebol começa aqui.</mark></div>
+          <div class="dpart chg"><small>Fala · alterada</small>Todo ano, atletas brasileiros embarcam para treinar com <mark>clubes da Catalunha e disputar torneios internacionais</mark>.</div>
+          <div class="dpart add"><small>Texto na tela · nova</small>+ de 300 atletas já viveram essa experiência</div>
+          <div class="dpart"><small>Encerramento</small>Sua história no futebol europeu pode começar na próxima temporada.</div>
+        </div>
+      </div>
+    </div>
+    <aside class="rt-side">
+      <span class="lbl">Versões</span>
+      <div class="ver on"><div class="t"><b>v5</b><span class="chip ok">atual</span></div><div class="muted">hoje 11:08 · edição manual</div></div>
+      <div class="ver"><div class="t"><b>v4</b><span class="chip mut">aprovada</span></div><div class="muted">hoje 09:30 · reescrita IA da parte 2</div></div>
+      <div class="ver"><div class="t"><b>v3</b></div><div class="muted">ontem 17:42 · edição manual</div><div class="row" style="margin-top:8px"><button class="btn sm pri">Voltar a esta versão</button></div></div>
+      <div class="ver"><div class="t"><b>v2</b></div><div class="muted">ontem 15:10 · cortes adicionados</div></div>
+      <div class="ver"><div class="t"><b>v1</b></div><div class="muted">ontem 14:55 · ideia da IA</div></div>
+      <p class="muted" style="margin-top:10px">Voltar cria uma nova versão (v6); nada se perde.</p>
+    </aside>
+  </div>
+</section>
+
+<!-- ========== PROJETOS ========== -->
+<section class="screen" id="projetos">
+<div class="pjview on" id="pjList">
+  <div class="pj-main">
+    <div class="toolbar"><input class="input" style="max-width:280px" placeholder="Buscar projeto…"><div class="sp"></div><button class="btn ghost">Verificar edições externas</button></div>
+
+    <div class="card pj on"><div class="th g1"></div><div class="info">
+      <div class="row"><h4>Chegada em Barcelona · 30s</h4><div class="sp"></div><span class="chip warn">Editado no FilmCraft</span></div>
+      <div class="meta">chegada-barcelona.fcproj · gerado de v4</div>
+      <div class="row" style="margin-bottom:8px"><button class="btn sm pri" data-ed>Abrir editor do projeto</button><button class="btn sm">Abrir no FilmCraft ↗</button></div>
+      <div class="alert">⚠ O arquivo mudou fora do painel hoje às 10:52 (mtime e hash diferentes). 3 diferenças.</div>
+    </div></div>
+    <div class="card pj"><div class="th g2"></div><div class="info">
+      <div class="row"><h4>Torneio Sub-17 · 45s</h4><div class="sp"></div><span class="chip ok">Em sincronia</span></div>
+      <div class="meta">torneio-sub17.fcproj · gerado de v2</div>
+      <div class="row"><button class="btn sm" data-ed>Abrir editor</button><button class="btn sm">Abrir no FilmCraft ↗</button><button class="btn sm ghost">Ver roteiro</button></div>
+    </div></div>
+    <div class="card pj"><div class="th g4"></div><div class="info">
+      <div class="row"><h4>Depoimento família Silva · 60s</h4><div class="sp"></div><span class="chip mut">Roteiro mudou no painel</span></div>
+      <div class="meta">depoimento-silva.fcproj · gerado de v1 · roteiro está na v3</div>
+      <div class="row"><button class="btn sm">Ver diferenças</button></div>
+    </div></div>
+    <div class="card pj"><div class="th g3"></div><div class="info">
+      <div class="row"><h4>Treino de goleiros · 20s</h4><div class="sp"></div><span class="chip mut">Sem projeto</span></div>
+      <div class="meta">roteiro v2 aprovado</div>
+      <div class="row"><button class="btn sm pri">Gerar projeto</button></div>
+    </div></div>
+  </div>
+
+  <aside class="pj-side">
+    <div class="row" style="margin-bottom:4px"><h3 style="font-size:14px">Sincronia · Chegada em Barcelona</h3></div>
+    <p class="muted" style="margin-bottom:10px">Escolha o sentido de cada diferença. Nada é gravado sem confirmação.</p>
+
+    <div class="diffrow"><div class="ic m">~</div><div><b>Parte "Fala"</b><div class="muted">Texto mudou · 00:04</div><div style="margin-top:5px;font-size:12px"><span style="color:var(--bad)">− clubes da Espanha</span><br><span style="color:var(--ok)">+ clubes da Catalunha</span></div></div><div class="dir-btns"><button>← Painel</button><button class="on">FilmCraft →</button></div></div>
+    <div class="diffrow"><div class="ic a">+</div><div><b>Clipe de b-roll novo</b><div class="muted">Adicionado no FilmCraft · 00:13</div></div><div class="dir-btns"><button class="on">← Painel</button><button>Ignorar</button></div></div>
+    <div class="diffrow"><div class="ic r">−</div><div><b>Texto na tela</b><div class="muted">Removido no FilmCraft · 00:16</div></div><div class="dir-btns"><button>← Painel</button><button class="on">Manter</button></div></div>
+
+    <div class="safe">
+      <span class="lbl">Antes de gravar o .fcproj</span>
+      <ul>
+        <li><i>✓</i> Cópia prévia em <span class="mono">&nbsp;.fcproj.bak</span></li>
+        <li><i>✓</i> Validação por <span class="mono">&nbsp;filmcraft-cli inspect</span></li>
+        <li><i>✓</i> Se recusar, a cópia volta sozinha</li>
+        <li><i>✓</i> Projeto editado à mão nunca é regerado inteiro</li>
+      </ul>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn sp">Cancelar</button><button class="btn pri sp">Aplicar 3 mudanças…</button></div>
+  </aside>
+</div>
+
+<div class="pjview" id="pjEd">
+  <aside class="pe-left">
+    <div class="row" style="margin-bottom:4px"><h3 style="font-size:14px">Roteiro do projeto</h3><div class="sp"></div><span class="chip mut">v4</span></div>
+    <p class="muted" style="margin-bottom:10px">Cada momento mostra o estado do b-roll, motion e SFX.</p>
+    <div class="mom"><div class="t"><span class="chip sel">Abertura</span><span class="mono muted">00:00</span><div class="sp"></div><span class="chip warn">fixa</span></div><p>O sonho de todo garoto que ama futebol…</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip ia">b-roll sugerido</span><span class="chip ok">motion</span></div></div>
+    <div class="mom on"><div class="t"><span class="chip ok">Fala</span><span class="mono muted">00:04</span></div><p>Todo ano, atletas brasileiros embarcam…</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip ia">2 candidatos</span><span class="chip ia">SFX sugerido</span></div></div>
+    <div class="mom"><div class="t"><span class="chip">B-roll</span><span class="mono muted">00:11</span></div><p>Treino · Atletas</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip ok">aprovado</span><span class="chip ok">SFX ok</span></div></div>
+    <div class="mom"><div class="t"><span class="chip warn">Vídeo anexado</span><span class="mono muted">00:16</span></div><p>"Meu filho voltou outra pessoa…"</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip ia">1 candidato</span><span class="chip mut">sem SFX</span></div></div>
+    <div class="mom"><div class="t"><span class="chip">Texto na tela</span><span class="mono muted">00:22</span></div><p>+ de 300 atletas já viveram…</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip ia">motion sugerido</span></div></div>
+    <div class="mom"><div class="t"><span class="chip sel">Encerramento</span><span class="mono muted">00:26</span></div><p>Sua história no futebol europeu…</p><div class="row" style="margin-top:5px;gap:4px"><span class="chip mut">sem b-roll</span><span class="chip ok">riser</span></div></div>
+    <div class="divider"></div>
+    <div class="alert">Editado no FilmCraft hoje 10:52 · 3 diferenças <button class="btn sm" style="margin-left:auto" data-sync>Ver</button></div>
+  </aside>
+
+  <div class="pe-main">
+    <div class="row" style="margin-bottom:10px">
+      <h3 style="font-size:15px">Chegada em Barcelona · 30s</h3><span class="chip warn">Editado no FilmCraft</span>
+      <div class="sp"></div><button class="btn sm" data-list>‹ Voltar aos projetos</button><button class="btn sm">Abrir no FilmCraft ↗</button>
+    </div>
+    <div class="player" style="max-height:290px"><div class="play">▶</div><span class="vz chip">Prévia com b-roll aprovado</span><span class="tc">00:07.0 / 00:32.0</span></div>
+    <div class="transport"><button class="btn sm">⏮</button><button class="btn pri sm">▶ Tocar</button><button class="btn sm">Tocar só este momento</button><button class="btn sm">⏭</button><span style="width:16px"></span><button class="btn sm">Prévia de áudio</button><button class="btn sm ghost">Prévia sem b-roll</button></div>
+    <div class="tracks">
+      <div class="selrange"></div><div class="ph2"></div>
+      <div class="trk"><div class="tn">Vídeo principal</div><div class="tb"><div class="blk v" style="left:0;width:12.5%">abertura</div><div class="blk v" style="left:12.5%;width:21.9%">fala</div><div class="blk v" style="left:50%;width:18.8%">depoimento</div><div class="blk v" style="left:81.3%;width:18.7%">encerramento</div></div></div>
+      <div class="trk"><div class="tn">B-roll</div><div class="tb"><div class="blk br prop" style="left:3%;width:9.5%">sugerido</div><div class="blk br prop" style="left:14%;width:15%">2 candidatos</div><div class="blk br" style="left:34.4%;width:15.6%">treino · aprovado</div></div></div>
+      <div class="trk"><div class="tn">Motion</div><div class="tb"><div class="blk mo" style="left:0;width:10%">título</div><div class="blk mo prop" style="left:69%;width:12%">contador</div></div></div>
+      <div class="trk"><div class="tn">Legenda</div><div class="tb"><div class="blk lg" style="left:12.5%;width:21.9%">cartelas ≤ 4 palavras</div><div class="blk lg prop" style="left:50%;width:18.8%">legendar?</div><div class="blk lg" style="left:81.3%;width:18.7%">cartelas</div></div></div>
+      <div class="trk"><div class="tn">Texto na tela</div><div class="tb"><div class="blk tx" style="left:56%;width:12%">Família Silva</div><div class="blk tx" style="left:69%;width:12%">+ de 300</div></div></div>
+      <div class="trk"><div class="tn">SFX</div><div class="tb"><div class="blk sx" style="left:0;width:6%">whoosh</div><div class="blk sx prop" style="left:12.5%;width:6%">whoosh</div><div class="blk sx prop" style="left:34.4%;width:6%">whoosh</div><div class="blk sx" style="left:94%;width:6%">riser</div></div></div>
+    </div>
+    <div class="ruler" style="padding-left:100px"><span>00:00</span><span>00:08</span><span>00:16</span><span>00:24</span><span>00:32</span></div>
+    <div class="row" style="margin-top:12px;gap:8px;color:var(--muted);font-size:12px"><span class="chip" style="border-style:dashed">tracejado = recomendação, ainda não aprovada</span><span>O SFX tem trilha própria e sobrevive a regravar o projeto.</span></div>
+    <div class="row" style="margin-top:16px"><button class="btn">Pré-visualizar antes de inserir</button><div class="sp"></div><button class="btn pri">Inserir aprovados no FilmCraft…</button></div>
+  </div>
+
+  <aside class="pe-right">
+    <div class="row" style="margin-bottom:6px"><h3 style="font-size:14px">Momento · Fala</h3><span class="mono muted">00:04 – 00:11</span></div>
+    <div class="info" style="margin-bottom:12px">"Todo ano, atletas brasileiros embarcam para treinar com clubes da Catalunha…"<br><span style="color:var(--ia)">Sugestão usa a fala e o briefing deste momento.</span></div>
+
+    <div class="sec-h" style="margin-top:0"><h4>B-roll recomendado</h4><span class="chip ia">2</span><div class="sp"></div><button class="btn sm">Buscar…</button></div>
+    <div class="row" style="gap:5px;flex-wrap:wrap;margin-bottom:8px"><span class="chip sel">broll</span><span class="chip">falas</span><span class="chip">posts</span><span class="chip">cortes</span><span class="chip mut">vídeo</span><span class="chip mut">foto</span><span class="chip mut">motion</span></div>
+    <div class="cand ap"><div class="th g1"><span class="dur">0:05</span></div><div style="flex:1;min-width:0"><div class="row"><b>chegada_aeroporto_01</b><div class="sp"></div><span class="chip ok">aprovado</span></div><div class="why"><b>Motivo:</b> tag Atletas + legenda "turma chegando ao aeroporto"</div><div class="muted" style="font-size:11px">fonte: broll · /Aeroporto</div><div class="row" style="margin-top:7px"><button class="btn sm">Trocar</button><button class="btn sm ghost danger">Descartar</button></div></div></div>
+    <div class="cand"><div class="th g8"><span class="dur">0:04</span></div><div style="flex:1;min-width:0"><div class="row"><b>chegada_aeroporto_01</b><div class="sp"></div><span class="chip ia">2º do mesmo item</span></div><div class="why"><b>Motivo:</b> descrição "grupo caminhando com malas"</div><div class="muted" style="font-size:11px">fonte: broll · /Aeroporto</div><div class="row" style="margin-top:7px"><button class="btn sm ok">Aprovar</button><button class="btn sm">Prévia</button><button class="btn sm ghost danger">Descartar</button></div></div></div>
+    <p class="muted" style="font-size:11.5px">Fontes marcadas como "referências" nunca aparecem como b-roll.</p>
+
+    <div class="sec-h"><h4>Motion</h4><div class="sp"></div><button class="btn sm">Biblioteca</button><button class="btn sm">Novo motion</button></div>
+    <div class="cand"><div class="th g5"><span class="dur">0:02</span></div><div style="flex:1"><div class="row"><b>lower-third nome</b><div class="sp"></div><span class="chip ia">por tag</span></div><div class="why"><b>Motivo:</b> tag Depoimento</div><div class="row" style="margin-top:6px"><button class="btn sm ok">Aprovar</button><button class="btn sm">Trocar</button></div></div></div>
+
+    <div class="sec-h"><h4>SFX sugerido</h4><span class="chip ia">entrada do b-roll</span></div>
+    <div class="sfxrow">
+      <div><b>whoosh_suave_02</b><div class="muted">tag transição · 0,6 s</div></div><div class="row"><button class="btn sm ok">Confirmar</button><button class="btn sm">Trocar</button></div>
+      <div>Volume <span class="muted">70%</span><div class="slider"><i style="width:70%"></i></div></div><div>Atraso <span class="muted">+0,1 s</span><div class="slider"><i style="width:30%"></i></div></div>
+      <div>Fade in <span class="muted">0,05 s</span><div class="slider"><i style="width:15%"></i></div></div><div>Fade out <span class="muted">0,2 s</span><div class="slider"><i style="width:40%"></i></div></div>
+    </div>
+  </aside>
+</div>
+</section>
+</main>
+
+<!-- modal remover tag -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 style="font-size:15px;margin-bottom:4px">Remover tag "Golaço"</h3>
+    <p class="muted">Ela está em 11 vídeos. O que fazer com as marcações?</p>
+    <div class="radio on"><i></i><div><b>Fundir em outra tag</b><div class="muted">Mantém as marcações na tag de destino</div><select class="input" style="margin-top:8px"><option>Gol (29 usos)</option><option>Comemoração (24 usos)</option></select></div></div>
+    <div class="radio"><i></i><div><b>Apagar as marcações</b><div class="muted">Os 11 vídeos perdem esta tag. Os arquivos não são afetados.</div></div></div>
+    <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" id="mclose">Cancelar</button><button class="btn danger">Remover tag</button></div>
+  </div>
+</div>
+
+
+
+<!-- modal importar pasta -->
+<div class="modal-bg" id="modalImp"><div class="modal" style="width:520px">
+  <h3 style="font-size:15px;margin-bottom:4px">Importar pasta</h3>
+  <p class="muted">Só aponta para a pasta, não copia arquivos.</p>
+  <div class="row" style="margin-top:12px"><input class="input" value="/Volumes/Acervo/Viagem_Nov_2026"><button class="btn">Escolher…</button></div>
+  <div class="tree">
+    <div>▾ Viagem_Nov_2026 <span class="muted">· 14 vídeos · 8 imagens</span></div>
+    <div class="ind">├ Treino <span class="arrow">→</span> <span class="chip pasta">/Treino</span> <span class="muted">5</span></div>
+    <div class="ind">├ Jogos <span class="arrow">→</span> <span class="chip pasta">/Jogos</span> <span class="muted">4</span></div>
+    <div class="ind">├ Hotel <span class="arrow">→</span> <span class="chip pasta">/Hotel</span> <span class="muted">2</span></div>
+    <div class="ind">├ Aeroporto <span class="arrow">→</span> <span class="chip pasta">/Aeroporto</span> <span class="muted">3</span></div>
+    <div class="ind">└ Fotos <span class="arrow">→</span> <span class="chip pasta">/Fotos</span> <span class="muted">8 imagens</span></div>
+  </div>
+  <label class="chk"><input type="checkbox" checked> Nome da subpasta vira tag automaticamente</label>
+  <label class="chk"><input type="checkbox"> Incluir subpastas de subpastas como tags separadas</label>
+  <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close="modalImp">Cancelar</button><button class="btn pri">Importar para a fila</button></div>
+</div></div>
+
+<!-- modal aprovar -->
+<div class="modal-bg" id="modalApr"><div class="modal" style="width:580px;max-height:90vh;overflow:auto">
+  <h3 style="font-size:15px;margin-bottom:4px">Aprovar e gerar projeto</h3>
+  <p class="muted">Chegada em Barcelona · v5 · 6 partes · 0:32. Aprovar não trava o roteiro.</p>
+  <span class="lbl" style="margin-top:14px">Modelo FilmCraft</span>
+  <div class="row"><select class="input"><option>Modelo BCN padrão</option><option>Modelo Reels</option><option>Em branco</option></select><div class="seg"><button class="on">16:9</button><button>9:16</button><button>1:1</button></div></div>
+  <span class="lbl" style="margin-top:14px">Gerar no projeto</span>
+  <label class="chk"><input type="checkbox" checked> Faixa de B-roll <span class="muted">· recomendações da IA, aprovadas depois no editor</span></label>
+  <label class="chk"><input type="checkbox" checked> Motion <span class="muted">· título e contador</span></label>
+  <label class="chk"><input type="checkbox" checked> SFX sugeridos <span class="muted">· whoosh, notification, riser</span></label>
+  <label class="chk"><input type="checkbox" checked> Legenda automática <span class="muted">· até 4 palavras por cartela</span></label>
+  <label class="chk"><input type="checkbox" checked> Texto na tela</label>
+  <span class="lbl" style="margin-top:14px">Partes incluídas</span>
+  <label class="chk"><input type="checkbox" checked> Abertura <span class="chip warn">fixa</span></label>
+  <label class="chk"><input type="checkbox" checked> Fala · 00:04</label>
+  <label class="chk"><input type="checkbox" checked> B-roll · 00:11</label>
+  <label class="chk"><input type="checkbox" checked> Vídeo anexado · 00:16 <span class="muted">· manter áudio original</span></label>
+  <label class="chk"><input type="checkbox" checked> Texto na tela · 00:22</label>
+  <label class="chk"><input type="checkbox" checked> Encerramento · 00:26</label>
+  <div class="alert" style="margin-top:12px">Nenhum projeto existente será sobrescrito. O .fcproj novo passa por <span class="mono">&nbsp;filmcraft-cli inspect</span>.</div>
+  <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-close="modalApr">Cancelar</button><button class="btn ok">Aprovar e gerar projeto</button></div>
+</div></div>
+
+<script>
+const titles={importar:["Importar","Fila de revisão, tags e imagens"],tags:["Tags da marca","Gerenciador de categorias e tags"],preview:["Preview e cortes","Biblioteca, cortes e tags por corte"],roteiros:["Roteiros","Documento de trabalho editável"],projetos:["Projetos","Sincronia e editor do projeto"]};
+const actions={importar:'<button class="btn">Filtros salvos</button>',tags:'<button class="btn">Exportar lista</button>',preview:'<button class="btn">‹ Anterior</button><span class="muted">3 de 12</span><button class="btn">Próximo ›</button>',roteiros:'<button class="btn pri">+ Novo roteiro</button>',projetos:'<div class="seg" id="pjSeg"><button class="on" data-p="pjList">Projetos e sincronia</button><button data-p="pjEd">Editor do projeto</button></div>'};
+function pjView(id){
+  document.querySelectorAll('.pjview').forEach(v=>v.classList.toggle('on',v.id===id));
+  document.querySelectorAll('#pjSeg button').forEach(b=>b.classList.toggle('on',b.dataset.p===id));
+}
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));
+  document.querySelectorAll('.nav [data-go]').forEach(b=>b.classList.toggle('on',b.dataset.go===id));
+  document.getElementById('ttl').innerHTML=titles[id][0]+'<span class="sub">'+titles[id][1]+'</span>';
+  document.getElementById('topact').innerHTML=actions[id];
+  document.querySelectorAll('#pjSeg button').forEach(b=>b.onclick=()=>pjView(b.dataset.p));
+}
+document.querySelectorAll('.nav [data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+go('importar');
+
+// ---- dados fictícios ----
+// nome, duração, gradiente, tags, (sem uso), status, subpasta, importação
+const vids=[
+ ["chegada_aeroporto_01.mp4","0:42","g1",["Atletas"],["Chegada ao aeroporto"],"novo","Aeroporto"],
+ ["treino_sub15_camp-nou_03.mp4","1:12","g2",["Treino","Camp Nou"],[],"indexado","Treino"],
+ ["jogo_amistoso_final.mp4","3:08","g3",["Jogo"],["Torcida"],"transcrito","Jogos"],
+ ["depoimento_pai_silva.mp4","2:20","g4",[],[],"cortado","Hotel"],
+ ["hotel_quarto_tour.mp4","0:35","g5",[],["Hotel"],"novo","Hotel"],
+ ["gol_golaço_sub17.mp4","0:18","g6",["Jogo"],[],"cortado","Jogos"],
+ ["cerimonia_premiacao.mp4","1:55","g7",[],["Cerimônia"],"transcrito","Cerimônia"],
+ ["ct_barcelona_drone.mp4","0:51","g8",["CT Barcelona"],[],"revisado","Treino"],
+ ["passeio_sagrada_familia.mp4","1:03","g1",["Passeio"],[],"indexado","Aeroporto"],
+ ["vestiario_pre_jogo.mp4","0:47","g3",[],[],"novo","Jogos"],
+ ["treino_goleiros_02.mp4","1:30","g2",["Treino"],["Goleiro"],"transcrito","Treino"],
+ ["torcida_arquibancada.mp4","0:29","g5",[],[],"novo","Jogos"],
+];
+const imgs=[
+ ["foto_aeroporto_chegada_01.jpg","g1",["Atletas"],[],"Fotos"],
+ ["foto_aeroporto_chegada_02.jpg","g8",["Atletas"],["Chegada"],"Fotos"],
+ ["foto_camp-nou_fachada.jpg","g3",["Camp Nou"],[],"Fotos"],
+ ["foto_time_posado.jpg","g2",["Atletas","Jogo"],[],"Fotos"],
+ ["foto_hotel_lobby.jpg","g5",[],["Hotel"],"Fotos"],
+ ["foto_trofeu.jpg","g4",["Cerimônia"],[],"Fotos"],
+ ["foto_treinador_prancheta.jpg","g6",[],["Treinador"],"Fotos"],
+ ["foto_familia_abraco.jpg","g7",[],[],"Fotos"],
+];
+const cutsN=[3,5,4,2,1,3,2,6,2,1,4,2];
+const stCls={novo:"mut",indexado:"mut",transcrito:"ok",cortado:"sel",revisado:"ok"};
+
+// ---- importar ----
+let mode='v'; const sel=new Set([1,2,5]);
+function render(){
+  const g=document.getElementById('grid');
+  if(mode==='v'){
+    g.innerHTML=vids.map((v,i)=>`
+     <div class="item ${sel.has(i)?'sel':''}" data-i="${i}">
+       <div class="check">✓</div>
+       <div class="th ${v[2]}"><span class="dur">${v[1]}</span></div>
+       <div class="name">${v[0]}</div>
+       <div class="tags"><span class="chip pasta">/${v[6]}</span>${v[3].map(t=>`<span class="chip">${t}</span>`).join('')}${!v[3].length&&!v[4].length?'<span class="chip mut">sem tag</span>':''}</div>
+       <div class="meta"><span class="chip ${stCls[v[5]]}" style="font-size:10.5px;padding:0 7px">${v[5]}</span><span>${cutsN[i]} ${cutsN[i]==1?"corte":"cortes"}</span></div>
+     </div>`).join('');
+  }else{
+    g.innerHTML=imgs.map((v,i)=>`
+     <div class="item ${sel.has(i)?'sel':''}" data-i="${i}">
+       <div class="check">✓</div>
+       <div class="imgph ${v[1]}"><span class="badge">foto</span></div>
+       <div class="name">${v[0]}</div>
+       <div class="tags"><span class="chip pasta">/${v[4]}</span>${v[2].map(t=>`<span class="chip">${t}</span>`).join('')}${!v[2].length&&!v[3].length?'<span class="chip mut">sem tag</span>':''}</div>
+       <div class="meta"><span>tag só no arquivo</span><span>sem cortes</span></div>
+     </div>`).join('');
+  }
+  g.querySelectorAll('.item').forEach(el=>el.onclick=()=>{const i=+el.dataset.i;sel.has(i)?sel.delete(i):sel.add(i);render()});
+  document.getElementById('selCount').textContent=sel.size+' selecionados';
+}
+render();
+document.getElementById('selAll').onclick=()=>{(mode==='v'?vids:imgs).forEach((_,i)=>sel.add(i));render()};
+document.querySelectorAll('#mediaSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#mediaSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  mode=b.dataset.m; sel.clear(); render();
+});
+document.querySelectorAll('.filters .chip, .pipeline .step').forEach(c=>c.onclick=()=>{
+  if(c.classList.contains('step')){document.querySelectorAll('.pipeline .step').forEach(x=>x.classList.remove('cur'));c.classList.add('cur')}
+  else if(c.closest('.filters').querySelector('.flbl').textContent==='Importação'){c.parentElement.querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));c.classList.add('sel')}
+  else c.classList.toggle('sel');
+});
+
+// ---- chips / segmented genéricos ----
+document.querySelectorAll('.tagcat .chip, .lib-top .chip').forEach(c=>c.onclick=()=>c.classList.toggle('sel'));
+document.querySelectorAll('.cat').forEach(c=>c.onclick=()=>{document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));c.classList.add('on')});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.seg button'); if(!b) return;
+  const s=b.parentElement; if(['rtView','pvSeg','pjSeg','mediaSeg'].includes(s.id)) return;
+  s.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+});
+
+// ---- preview: biblioteca ----
+let cur=1; const libSel=new Set([1,5,10]);
+function renderLib(){
+  document.getElementById('vlist').innerHTML=vids.map((v,i)=>`
+   <div class="vi ${i===cur?'on':''}" data-i="${i}">
+     <input type="checkbox" ${libSel.has(i)?'checked':''}>
+     <div class="th ${v[2]}" style="width:60px;flex-shrink:0"></div>
+     <div class="vn"><b>${v[0]}</b><div class="muted">${cutsN[i]} ${cutsN[i]==1?"corte":"cortes"} · ${v[1]}</div><div class="vt"><span class="chip pasta">/${v[6]}</span>${v[3].slice(0,1).map(t=>`<span class="chip">${t}</span>`).join('')}</div></div>
+   </div>`).join('');
+  document.querySelectorAll('.vi').forEach(el=>{
+    el.onclick=()=>{cur=+el.dataset.i;document.getElementById('pvName').textContent=vids[cur][0];renderLib()};
+    el.querySelector('input').onclick=e=>{e.stopPropagation();const i=+el.dataset.i;libSel.has(i)?libSel.delete(i):libSel.add(i);document.getElementById('libCount').textContent=libSel.size+' selecionados'};
+  });
+}
+renderLib();
+document.getElementById('libAll').onclick=()=>{vids.forEach((_,i)=>libSel.add(i));document.getElementById('libCount').textContent=libSel.size+' selecionados';renderLib()};
+function pvView(v){
+  document.getElementById('pvOne').style.display=v==='one'?'block':'none';
+  document.getElementById('pvMany').style.display=v==='many'?'block':'none';
+  document.querySelectorAll('#pvSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+}
+document.querySelectorAll('#pvSeg button').forEach(b=>b.onclick=()=>pvView(b.dataset.v));
+document.getElementById('goMany').onclick=()=>pvView('many');
+document.querySelectorAll('.pv-side #pvOne .cut').forEach(c=>c.onclick=()=>{document.querySelectorAll('#pvOne .cut').forEach(x=>x.classList.remove('on'));c.classList.add('on')});
+
+// ---- roteiros ----
+document.querySelectorAll('#rtView button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#rtView button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('rtEd').style.display=b.dataset.v==='ed'?'flex':'none';
+  document.getElementById('rtVs').style.display=b.dataset.v==='vs'?'flex':'none';
+});
+document.querySelectorAll('.rl').forEach(r=>r.onclick=()=>{document.querySelectorAll('.rl').forEach(x=>x.classList.remove('on'));r.classList.add('on')});
+
+// ---- projetos ----
+document.querySelectorAll('[data-ed]').forEach(b=>b.onclick=e=>{e.stopPropagation();pjView('pjEd')});
+document.querySelectorAll('[data-list],[data-sync]').forEach(b=>b.onclick=()=>pjView('pjList'));
+document.querySelectorAll('.mom').forEach(m=>m.onclick=()=>{document.querySelectorAll('.mom').forEach(x=>x.classList.remove('on'));m.classList.add('on')});
+document.querySelectorAll('.dir-btns').forEach(g=>g.querySelectorAll('button').forEach(b=>b.onclick=()=>{g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}));
+document.querySelectorAll('.pj').forEach(p=>p.onclick=()=>{document.querySelectorAll('.pj').forEach(x=>x.classList.remove('on'));p.classList.add('on')});
+
+// ---- modais ----
+const open=id=>document.getElementById(id).classList.add('on');
+const close=id=>document.getElementById(id).classList.remove('on');
+document.querySelectorAll('.rm').forEach(b=>b.onclick=()=>open('modal'));
+document.getElementById('mclose').onclick=()=>close('modal');
+document.getElementById('impBtn').onclick=()=>open('modalImp');
+document.getElementById('aprBtn').onclick=()=>open('modalApr');
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>close(b.dataset.close));
+document.querySelectorAll('.modal-bg').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('on')});
+document.querySelectorAll('.radio').forEach(r=>r.onclick=()=>{document.querySelectorAll('.radio').forEach(x=>x.classList.remove('on'));r.classList.add('on')});
+</script>
+</body>
+</html>

@@ -1,24 +1,37 @@
 # 08 — Plano da fase: tags no import, cortes, voz sem música, roteiros abertos, FilmCraft
 
+Telas, fluxos e critérios de aceite de cada branch: `claude/spec-list.md`.
+Protótipo navegável das telas: `claude/mockup-painel-ng3.html` (abrir no navegador).
+
 Decisões tomadas com o Lucas (2026-11-13):
 
-- **Tags**: lista fixa por marca (`config/marcas/<marca>/tags.toml`) **+ tags livres**; a IA
-  sugere, a pessoa confirma.
+- **Tags**: lista fixa por marca (`config/marcas/<marca>/tags.toml`) **+ tags livres**. Vêm de
+  quatro origens: **subpasta** no import, arquivos do **Lightroom**, **metadados** da mídia e
+  marcação **manual**. Nenhuma IA reconhece imagem ou vídeo para sugerir tag.
 - **Cortes**: mistura de três origens — frases da fala, mudança de cena e marcação manual — e
   são **só anotações** (entrada/saída + tags), nunca arquivos novos.
 - **Separação voz/música**: automática quando houver música de fundo; dá para forçar por fonte.
 - **Roteiros**: menos engessados, com espaço real para input humano.
 - **Projetos**: edição integrada ao FilmCraft (ida e volta), não só geração.
 
+**Removido do roadmap (2026-11-13):** a IA que reconhece imagens e vídeos — classificação com
+V-JEPA 2 + SigLIP, sugestão de tag com aceite em um clique (`ia_sugerida`/`ia_aceita`), tag nova
+proposta por IA, lista de recomendações da IA no gerenciador e o limiar de novidade. Continuam
+as IAs de texto e áudio: transcrição, ideia de roteiro e "reescrever parte".
+
 Ordem de trabalho (cada uma num branch, com commit antes):
 
 | # | branch | depende de | entrega |
 |---|---|---|---|
 | 1 | `fase/separacao-voz` | — | transcrição melhor já no próximo import |
-| 2 | `fase/tags-import` | — | modelo de dados de mídia/corte/tag + aba importar nova |
-| 3 | `fase/cortes` | 1, 2 | cortes automáticos (fala + cena) e manuais no preview |
-| 4 | `fase/roteiros-abertos` | 2, 3 | roteiro editável por humano, busca usando tags e cortes |
-| 5 | `fase/filmcraft-sync` | 4 | ler o `.fcproj` de volta e manter roteiro ↔ projeto em sincronia |
+| 2 | `fase/tags-import` | — | modelo de dados de mídia/corte/tag, aba importar nova, tags de Lightroom e metadados, gerenciador de tags |
+| 3 | `fase/cortes` | 1, 2 | cortes automáticos (fala + cena) e manuais, biblioteca de vídeos |
+| 4 | `fase/roteiros-abertos` | 2, 3 | roteiro editável por humano, versões, aprovar com opções |
+| 5 | `fase/filmcraft-sync` | 4 | ler o `.fcproj` de volta, sincronia com confirmação, editor do projeto |
+
+Propostas depois da 4, **ainda sem aprovação**: `fase/broll-motion` (busca de b-roll e motion
+no painel), `fase/sfx` (biblioteca e sugestão de SFX) e `fase/edicao` (recursos de edição).
+Detalhes em `claude/spec-list.md`.
 
 ---
 
@@ -50,79 +63,75 @@ Ordem de trabalho (cada uma num branch, com commit antes):
 **Testes:** `tem_musica` com sinais sintéticos (seno + ruído vs. só ruído modulado);
 `separar` com mock do subprocess. Nada de modelo real nos testes.
 
+Não tem tela nova; entra no painel só como dependência do preview de cortes.
+
 ## 2. Interface de tags no import
 
 ### Modelo de dados (sqlite em `dados/marcas/<marca>/midia.sqlite`)
 
 ```
-midia(id, fonte_id, caminho_rel, tipo, duracao, largura, altura, hash_rapido, status_import)
-tag(id, slug, nome, categoria, origem)          -- origem: marca | livre
-midia_tag(midia_id, tag_id, por)                -- por: humano | ia_sugerida | ia_aceita
-corte(id, midia_id, ini, fim, origem, titulo, nota, nota_ia, criado_em)
+importacao(id, caminho, data)                  -- cada "importar pasta"; filtro por importação
+midia(id, fonte_id, importacao_id, caminho_rel, tipo, duracao, largura, altura,
+      hash_rapido, status_import)              -- tipo: video | imagem
+tag(id, slug, nome, categoria, origem)         -- origem: marca | livre | pasta | lightroom | metadados
+midia_tag(midia_id, tag_id, por)               -- por: humano | pasta | lightroom | metadados
+corte(id, midia_id, ini, fim, origem, proposto, titulo, nota, criado_em)
                                                -- origem: fala | cena | manual
 corte_tag(corte_id, tag_id, por)
+midia_texto(midia_id, campo, texto, origem)    -- título e legenda dos metadados (busca, não tag)
 ```
 
 - `hash_rapido` (tamanho + primeiros/últimos MB) para reconhecer arquivo movido sem reprocessar.
 - `status_import`: `novo → indexado → (separado) → transcrito → cortado → revisado`.
-- O índice FTS de `achar/indice.py` ganha colunas de tags e cortes (busca por "tag:camp-nou").
+  Imagens vão de `novo` a `indexado` e a `revisado` (sem transcrição nem cortes).
+- O `slug` da tag não muda ao renomear; só o `nome` visível.
+- O índice FTS de `achar/indice.py` ganha colunas de tags, cortes e `midia_texto`
+  (busca por "tag:camp-nou").
 
 ### Fluxo na aba importar
 
-1. Apontar pasta (como hoje) → os vídeos novos caem numa **fila de revisão**, não direto no índice.
-2. Fila em grade (reaproveita `ui/grade.rs`): miniatura, duração, status; seleção múltipla.
-3. Painel lateral de tags: categorias da marca como pastilhas + campo de tag livre com
-   autocompletar; aplicar a N selecionados de uma vez. Sugestões da IA aparecem tracejadas;
-   um clique aceita, outro descarta.
-4. "Marcar como revisado" libera a mídia para roteiros e b-roll.
+1. **Importar pasta** (janela): mostra a árvore da pasta; nada é copiado. Cada subpasta vira tag
+   com origem `pasta`. Opção de já ler `.xmp` e metadados no mesmo passo.
+2. Os arquivos novos caem numa **fila de revisão**, não direto no índice.
+3. Fila em grade (reaproveita `ui/grade.rs`): miniatura, duração, status; seleção múltipla.
+   Filtros por importação, por passo (Importado, Fila de revisão, Com tags, Com cortes,
+   No roteiro) e por subpasta. Alternância **Vídeos / Imagens** na mesma aba; imagem só recebe
+   tag no arquivo inteiro.
+4. Painel lateral de tags: categorias da marca como pastilhas, cada tag mostrando a origem
+   (pasta, Lightroom, metadados, manual), + campo de tag livre com autocompletar; aplicar a N
+   selecionados de uma vez.
+5. "Marcar como revisado" libera a mídia para roteiros e b-roll.
 
-### Menu de categorias e tags (gerenciador)
+### Importar tags do Lightroom e dos metadados
 
-Um menu próprio ("tags da marca"), separado da fila de import:
+Janela "Importar tags de arquivos", aberta no Importar e no gerenciador. Escolhe as fontes,
+mostra a **prévia do mapeamento** e só grava depois de confirmar. Arquivos `.xmp`, catálogos
+`.lrcat` e os metadados das mídias são **só lidos**, nunca alterados.
+
+| Fonte | O que lê | Vira |
+|---|---|---|
+| Sidecar `.xmp` do Lightroom | keywords e keywords hierárquicas (`Local\|Camp Nou`) | tag; a hierarquia vira categoria e tag, origem `lightroom` |
+| Catálogo `.lrcat` (sqlite, só leitura; desligado por padrão) | keywords e coleções | tag, origem `lightroom` |
+| IPTC, XMP e EXIF embutidos | keywords, cidade, país, GPS | tag de Local, origem `metadados` |
+| IPTC, XMP e EXIF embutidos | título e legenda | texto em `midia_texto`, não tag |
+| Estrelas e rótulo de cor (desligado por padrão) | avaliação e cor | tag, se a opção estiver marcada |
+
+Tag que já existe na marca é reaproveitada pelo slug; tag nova aparece como "nova" na prévia e
+entra sem categoria quando o arquivo não traz hierarquia. Vale para imagens e, quando houver
+metadados, para vídeos. Leitor dos metadados: a decidir (ver perguntas).
+
+### Gerenciador de tags da marca
+
+Um menu próprio ("tags da marca", `ui/tags.rs`), separado da fila de import:
 
 - Lista de **categorias** com a contagem de entradas (mídias + cortes) em cada uma, e dentro
-  dela as tags com a contagem de cada tag.
+  dela as tags com a contagem e a **origem** de cada tag. Lista à parte das tags sem categoria.
 - **Criar, renomear e remover** categoria ou tag; **criar em lote** (colar uma lista, uma por
-  linha, `slug = Nome` ou só o nome). Renomear muda só o nome visível; o `slug` fica, para não
-  quebrar as marcações. Remover pede destino: apagar as marcações ou **fundir** em outra tag.
-- **Recomendações da IA**: lista de tags propostas (nome, categoria sugerida, quantas mídias
-  cairiam nela, 4 miniaturas de exemplo, o motivo). Ações: aceitar, renomear e aceitar, fundir
-  numa existente, descartar (a IA não volta a propor a mesma).
+  linha, `Categoria: tag` ou só o nome). Renomear muda só o nome visível; o `slug` fica, para
+  não quebrar as marcações. Remover pede destino: apagar as marcações ou **fundir** em outra tag.
+- Atalho para a janela "Importar tags de arquivos".
 - Tudo grava em `config/marcas/<marca>/tags.toml` (escrita atômica, com cópia em `historico/`);
   as contagens vêm do `midia.sqlite`.
-
-### Classificação automática: V-JEPA 2 + uma segunda IA para tags novas
-
-**V-JEPA 2** (Meta, código aberto) entende vídeo de verdade (movimento, ação), não só quadros
-soltos. Mas ele **não lê texto**: dá um vetor (embedding) por trecho de vídeo e não sabe o que
-é "treino" ou "Camp Nou" sozinho. Por isso o desenho é:
-
-1. **Embeddings** — cada corte (ou janela de ~4 s nos vídeos sem corte) passa pelo V-JEPA 2
-   **ViT-L** (300 M parâmetros, fp16, cabe nos 4 GB; o ViT-g não cabe). Vetores guardados em
-   `dados/marcas/<marca>/embeddings/vjepa2.npy` + id no sqlite. Roda em lote, de madrugada, em
-   série com o whisper (nunca os dois na GPU). Venv próprio `.venv-visao/`.
-2. **Classificador por tag** — com as marcações que você confirmar, um classificador leve por
-   categoria (regressão logística / k-vizinhos sobre os embeddings, CPU, segundos). Aprende
-   com poucos exemplos (~5–10 por tag) e melhora a cada confirmação.
-3. **Partida a frio** (tag nova, sem exemplos ainda) — para não depender só de marcações à mão:
-   texto da transcrição + **SigLIP** (modelo imagem↔texto) nos quadros, comparando com o nome e
-   a descrição da tag. Fica como sugestão até ter exemplos para o classificador do passo 2.
-4. **Quando nenhuma tag serve** — o sinal de "existe uma descrição melhor" é: confiança baixa
-   em todas as tags da categoria **e** o vídeo forma grupo com outros parecidos (agrupamento
-   dos embeddings que não caem perto de nenhuma tag). Um grupo com ≥ N mídias vai para a
-   **segunda IA (Claude)** com 4–6 quadros, trechos da fala e a lista atual de tags; ela propõe
-   nome, categoria e descrição de uma tag nova, ou responde "é a tag X existente". A proposta
-   cai na lista de **recomendações** do menu — nada entra na marca sem você aceitar.
-5. **Saída para a pessoa** — cada sugestão aparece na fila de import tracejada, com a
-   confiança; acima de um limiar alto pode vir pré-marcada (`ia_sugerida`), mas só vira
-   `ia_aceita` com um clique.
-
-Config em `config/padroes/classificacao.toml`: modelo, janela, limiares de confiança e de
-novidade, tamanho mínimo de grupo para pedir tag nova.
-
-**Alternativa a avaliar depois:** **VL-JEPA** (Meta, dez/2025) junta o JEPA com texto e
-classificaria direto pelo nome da tag; trocar o passo 3 por ele se os pesos ficarem
-disponíveis e couberem na GPU.
 
 ## 3. Cortes como anotação
 
@@ -130,13 +139,19 @@ Três geradores, todos escrevendo na tabela `corte` — nunca no disco do acervo
 
 | origem | como | para |
 |---|---|---|
-| `fala` | `plano/falas.frases_de()` agrupa frases em ideias (pausa > X s ou mudança de assunto pela IA) | falas |
+| `fala` | `plano/falas.frases_de()` agrupa frases em ideias por pausa > X s | falas |
 | `cena` | PySceneDetect (`ContentDetector`) no proxy 360p, no `.venv-sep` ou no sistema | broll |
 | `manual` | entrada/saída no preview (`I`/`O` na tira de quadros), com tags e nota | qualquer |
 
 - Cortes automáticos nascem como **propostos**; no preview a pessoa ajusta borda, junta, divide,
   apaga. Um corte manual nunca é sobrescrito por reprocessamento.
-- Tags da mídia são herdadas pelo corte; tags do corte são mais específicas.
+- Tag do vídeo e tag do corte são **níveis separados**: mudar uma não muda a outra. Dá para
+  copiar as tags do vídeo para o corte.
+- **Biblioteca de vídeos** (`ui/preview.rs`): lista de todos os vídeos com busca, seleção
+  múltipla e filtro por qualquer tipo de tag (do vídeo, do corte ou ambos; categorias, subpastas,
+  livres, Lightroom e metadados, tipo de corte).
+- **Cortes dos selecionados**: cortes de vários vídeos juntos, agrupados por vídeo, com aceitar
+  propostos, aplicar tag e usar no roteiro.
 - `projetos/gerar` e `roteiros` passam a aceitar `corte_id` onde hoje aceitam vídeo + tempo.
 
 ## 4. Roteiros menos engessados
@@ -146,21 +161,26 @@ Hoje: a IA escreve tudo, a pessoa só move/remove/troca candidato, e depois de a
 Novo modelo — **o roteiro é um documento de trabalho conjunto**:
 
 - **Começar de qualquer ponto:** da ideia da IA, de um texto livre do Lucas (briefing, tópicos),
-  ou de cortes escolhidos à mão na grade ("montar roteiro com estes").
-- **Partes livres:** adicionar parte em qualquer lugar; tipos `fala` (corte existente), `nova`
-  (texto a gravar), `locucao`, `texto_na_tela`, `respiro` (só imagem/música). Duração editável.
+  de cortes escolhidos à mão ("montar roteiro com estes") ou de um **vídeo anexado**.
+- **Todo texto editável** na própria tela; lista de roteiros com status.
+- **Partes livres:** adicionar parte em qualquer lugar; tipos `fala` (corte existente), `broll`,
+  `motion`, `texto_na_tela`, `pausa` e `livre`, além de **texto novo** (a gravar). Duração editável.
+- **Vídeo anexado:** vídeo que já tem fala e texto; a fala transcrita é editável, o texto que
+  aparece no vídeo é digitado pela pessoa; opções de manter o áudio original e legendar a fala.
 - **Nota de direção por parte** (humano) e **por roteiro**; a IA lê as notas ao reescrever.
 - **"Reescrever só esta parte"** / **"sugerir alternativas"**: a IA propõe 3 opções para uma
   parte, mantendo o resto travado. Partes podem ser marcadas como **fixas** (a IA não mexe).
-- **Trocar fala por outra parecida:** busca no banco de falas + cortes por tags e semelhança.
+- **Trocar fala por outra parecida:** busca no banco de falas + cortes por tags e texto.
 - **Aparar fala:** ajustar entrada/saída da fala em palavras (a transcrição dá os tempos).
 - **Versões:** cada salvamento grava `roteiros/<id>/v<n>.json`; dá para comparar e voltar.
-- **Aprovado não trava:** aprovar gera o projeto; mudanças depois vão para o projeto pela
-  sincronia (seção 5), com aviso quando o projeto foi editado à mão no FilmCraft.
+- **Aprovar abre opções** antes de gerar: modelo e formato (16:9, 9:16, 1:1), faixas a gerar
+  (b-roll, motion, SFX, legenda, texto na tela), partes incluídas e checklist "Pronto para aprovar?".
+- **Aprovado não trava:** mudanças depois vão para o projeto pela sincronia (seção 5), com
+  aviso quando o projeto foi editado à mão no FilmCraft.
 
 Mudanças em `plano/roteiros.py`: `editar()` ganha `inserir`, `tipo`, `duracao`, `aparar`,
-`nota`, `fixar`, `reescrever_parte`; formato de arquivo com `versao`. Prompts em
-`plano/prompts.py` passam a receber notas e partes fixas.
+`nota`, `fixar`, `reescrever_parte`, `anexar_video`; formato de arquivo com `versao`. Prompts
+em `plano/prompts.py` passam a receber notas e partes fixas.
 
 ## 5. Edição integrada com o FilmCraft
 
@@ -178,6 +198,9 @@ Hoje a ida é boa (`gerar`, `fcproj.ganho/legendas`), mas não há volta.
 4. **Abrir no FilmCraft** a partir do painel, no tempo da parte (se o CLI aceitar `--seek`;
    senão só abrir o projeto).
 5. Detectar edição externa por `mtime` + hash do `.fcproj`; mostrar no card do projeto.
+6. **Editor do projeto** (`ui/projeto.rs`): roteiro à esquerda, player e timeline de seis faixas
+   (vídeo principal, b-roll, motion, legenda, texto na tela, SFX) no centro, recomendações do
+   momento à direita (b-roll, motion, SFX).
 
 **A investigar primeiro:** que campos do clipe o FilmCraft preserva ao salvar (para o marcador
 `parte_id`) e o que o `filmcraft-cli` oferece além de `probe` e `inspect`.
@@ -186,7 +209,12 @@ Hoje a ida é boa (`gerar`, `fcproj.ganho/legendas`), mas não há volta.
 
 ## Perguntas em aberto
 
+A lista completa (12 perguntas) está em `claude/spec-list.md`. As principais:
+
 - Quantas tags livres viram categoria da marca? (revisar a cada ~50 mídias importadas)
-- Limiar de novidade e tamanho mínimo de grupo para pedir tag nova: calibrar com ~200 vídeos já marcados.
-- Cortes por fala: agrupar por pausa ou pedir à IA os limites de ideia? (começar por pausa)
+- Cortes por fala: agrupar por pausa ou outro critério? (começar por pausa)
 - O stem de música deve ser guardado ou descartado depois da transcrição? (padrão: descartar)
+- Lightroom: só `.xmp` ou também `.lrcat`? Separador de hierarquia (`Categoria|Tag`)?
+  Keyword com o mesmo slug de uma tag de pasta: funde ou fica separada por origem?
+- Qual leitor de IPTC/XMP/EXIF (por exemplo `exiftool`) e quais formatos de vídeo trazem
+  metadados úteis?

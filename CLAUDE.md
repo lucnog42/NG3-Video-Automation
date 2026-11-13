@@ -6,8 +6,8 @@ Guia para quem (humano ou Claude) mexe neste repositório. Leia antes de qualque
 
 1. `git status` limpo. Se houver algo pendente, **commit primeiro** (regra do Lucas).
 2. Trabalhe direto na instalação do SDD: `/run/media/doykoy/SDD/NG3-Video-Automation`.
-3. Uma frente por branch: `fase/tags-import`, `fase/separacao-voz`, `fase/roteiros-abertos`,
-   `fase/filmcraft-sync` (ver `docs/08-plano-fase-import-voz-roteiros.md`).
+3. Uma frente por branch: `fase/separacao-voz`, `fase/tags-import`, `fase/cortes`, `fase/roteiros-abertos`,
+   `fase/filmcraft-sync` (ver `docs/08-plano-fase-import-voz-roteiros.md` e `claude/spec-list.md`).
 4. Rode os testes antes e depois: `python3 -m unittest discover -s testes`.
 
 ## O que é o projeto
@@ -61,7 +61,6 @@ cp ~/.cache/ng3-target/release/ng3-painel ./ng3-painel
 | sistema `python3` | painel, api, roteiros, projetos | só stdlib + numpy |
 | `.venv-asr/` | transcrição (faster-whisper, CUDA 12) | `requirements-asr.txt` |
 | `.venv-sep/` | separação de voz/música | `requirements-separacao.txt` |
-| `.venv-visao/` | V-JEPA 2 + SigLIP (tags) | `requirements-visao.txt` |
 
 Venvs separados de propósito: torch/onnxruntime-gpu da separação brigam com as versões fixas
 do ASR. O motor chama cada venv por subprocess, como `legendar.garantir_venv()` já faz.
