@@ -179,10 +179,14 @@ def _sincronizar_biblioteca(so: str | None = None) -> bool:
         return False
     _BIBLIOTECA["sincronizando"] = True
 
+    def avisar(fonte, k, n, fase):
+        emitir({"evento": "progresso", "chave": "biblioteca", "rotulo": f"{fonte}: {fase or 'catalogando'}",
+                "feito": k, "total": n})
+
     def rodar():
         r = {}
         try:
-            r = biblioteca.sincronizar(so)
+            r = biblioteca.sincronizar(so, progresso=avisar)
         except Exception as e:                     # pragma: no cover
             r = {"erro": f"{type(e).__name__}: {e}"}
         finally:

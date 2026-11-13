@@ -45,13 +45,17 @@ impl Player {
     /// Toca `arquivo` de `ini` até `fim` (ou o fim do vídeo). `w`/`h`: tamanho do vídeo (proporção).
     pub fn tocar(&mut self, arquivo: &Path, chave: &str, ini: f32, fim: Option<f32>, w: u32, h: u32) -> Result<(), String> {
         self.parar();
+        // a caixa sai da proporção que quem chamou conhece, mas o FFmpeg encaixa o vídeo nela sem
+        // deformar (o que sobra vira faixa preta): se a proporção estiver errada (tira ainda não
+        // carregada, vídeo de celular girado pelos metadados), o vídeo não fica achatado
         let (w, h) = (w.max(2), h.max(2));
         let (lw, lh) = if w >= h { (LADO, (LADO * h / w / 2 * 2).max(2)) } else { ((LADO * w / h / 2 * 2).max(2), LADO) };
         let mut cmd = Command::new("ffmpeg");
         cmd.args(["-nostdin", "-hide_banner", "-loglevel", "error", "-re", "-ss", &format!("{ini:.3}"), "-i"])
             .arg(arquivo);
         if let Some(f) = fim { cmd.args(["-t", &format!("{:.3}", (f - ini).max(0.1))]); }
-        cmd.args(["-an", "-vf", &format!("scale={lw}:{lh}"), "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+        let filtro = format!("scale={lw}:{lh}:force_original_aspect_ratio=decrease,pad={lw}:{lh}:(ow-iw)/2:(oh-ih)/2:black");
+        cmd.args(["-an", "-vf", &filtro, "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
             .stdout(Stdio::piped()).stderr(Stdio::null()).stdin(Stdio::null());
         let mut ff = cmd.spawn().map_err(|e| format!("não abriu o ffmpeg ({e})"))?;
         let mut saida = ff.stdout.take().ok_or("ffmpeg sem saída")?;

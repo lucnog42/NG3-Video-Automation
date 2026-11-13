@@ -243,7 +243,7 @@ fn painel_video(s: &App, videos: Vec<String>, t: Tema, tira_w: Option<f32>) -> E
         c = c.child(faixa);
     }
     if let Some((tr, im)) = tira {
-        let fita = super::comum::fita("tira", im, tr.n, q, 64.0, t, |s: &mut App, i| s.escolher_quadro(i));
+        let fita = super::comum::fita("tira", im, tr.n, s.quadro_no_ar_preview(), 64.0, t, |s: &mut App, i| s.clicar_quadro_preview(i));
         c = c.child(fita);
     }
     let mut rodape = row().w_full().gap(8.0).center_y()

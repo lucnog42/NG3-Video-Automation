@@ -160,7 +160,8 @@ def propor(ids: list[int], origem: str, db: str | None = None) -> list[dict]:
     con.close()
     c = cfg().get(origem) or {}
     out = []
-    for mid, caminho in linhas:
+    print(f"[0/{len(linhas)}] {origem}", flush=True)
+    for k, (mid, caminho) in enumerate(linhas, 1):
         try:
             if origem == "fala":
                 from transcricao import legendas, legendar
@@ -174,7 +175,8 @@ def propor(ids: list[int], origem: str, db: str | None = None) -> list[dict]:
             out.append(gravar_propostas(mid, origem, novos, db))
         except Exception as e:
             out.append({"midia": mid, "origem": origem, "erro": str(e)[:200]})
-        print(json.dumps(out[-1], ensure_ascii=False), flush=True)
+        r = out[-1]
+        print(f"[{k}/{len(linhas)}] " + (f"erro: {r['erro']}" if "erro" in r else f"{r['propostos']} proposto(s)"), flush=True)
     return out
 
 

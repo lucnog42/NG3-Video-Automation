@@ -158,6 +158,27 @@ pub struct Tarefa {
     pub comando: String,
     pub linhas: VecDeque<String>,
     pub fim: Option<bool>,
+    /// "[feito/total]" na última linha que trouxe um, e o "ETA n min" se veio junto
+    pub progresso: Option<(u32, u32)>,
+    pub eta: String,
+}
+
+/// "[12/340]" em qualquer lugar da linha (o formato das tarefas longas do motor).
+pub fn ler_progresso(l: &str) -> Option<(u32, u32)> {
+    let mut resto = l;
+    while let Some(i) = resto.find('[') {
+        let depois = &resto[i + 1..];
+        if let Some(j) = depois.find(']') {
+            if let Some((a, b)) = depois[..j].split_once('/')
+                && let (Ok(a), Ok(b)) = (a.trim().parse::<u32>(), b.trim().parse::<u32>()) && b > 0 {
+                return Some((a.min(b), b));
+            }
+            resto = &depois[j..];
+        } else {
+            break;
+        }
+    }
+    None
 }
 
 pub struct App {
@@ -736,7 +757,7 @@ impl App {
             return;
         }
         let t = self.tempo_do_quadro();
-        let (w, h) = self.tiras.get(&v).map_or((16, 9), |(tr, _)| (tr.largura, tr.altura));
+        let (w, h) = self.tiras.get(&v).map_or((1, 1), |(tr, _)| (tr.largura, tr.altura));
         let caminho = self.base.join(&v);
         if let Err(e) = self.x.player.tocar(&caminho, &v, t, None, w, h) {
             self.aviso = Some(format!("{e}; instale com: sudo pacman -S ffmpeg mpv"));
@@ -753,6 +774,26 @@ impl App {
         if let Err(e) = std::process::Command::new("mpv").arg(format!("--start={t:.2}")).arg("--force-window=yes")
             .arg(&caminho).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
             self.aviso = Some(format!("não abriu o mpv ({e}); instale com: sudo pacman -S mpv"));
+        }
+    }
+
+    /// Clique num quadro da tira do preview: escolhe; se estiver tocando, o vídeo pula para ali.
+    pub fn clicar_quadro_preview(&mut self, i: usize) {
+        let Some(v) = self.preview.as_ref().and_then(|p| p.video.clone()) else { return };
+        let tocando = self.x.player.video.as_deref() == Some(v.as_str());
+        self.x.player.parar();
+        self.escolher_quadro(i);
+        if tocando { self.tocar(); }
+    }
+
+    /// O quadro da tira que está no ar: o do player, se tocando; senão o escolhido.
+    pub fn quadro_no_ar_preview(&self) -> usize {
+        let p = self.preview.as_ref();
+        let q = p.map_or(0, |p| p.quadro);
+        let Some(v) = p.and_then(|p| p.video.as_ref()) else { return q };
+        match (self.x.player.video.as_deref() == Some(v.as_str()), self.x.player.tempo(), self.tiras.get(v)) {
+            (true, Some(t), Some((tr, _))) => mais_perto(&tr.tempos, t).unwrap_or(q),
+            _ => q,
         }
     }
 
@@ -1257,11 +1298,16 @@ impl App {
             self.tarefas.push(Tarefa {
                 id, dono: v["dono"].as_str().unwrap_or("").into(),
                 comando: v["comando"].as_str().unwrap_or("").into(), linhas: VecDeque::new(), fim: None,
+                progresso: None, eta: String::new(),
             });
             return true;
         }
         let Some(t) = self.tarefas.iter_mut().find(|t| t.id == id) else { return false };
         if let Some(l) = v.get("linha").and_then(Value::as_str) {
+            if let Some(p) = ler_progresso(l) { t.progresso = Some(p); }
+            if let Some(i) = l.find("ETA ") {
+                t.eta = l[i + 4..].split('·').next().unwrap_or("").trim().to_string();
+            }
             t.linhas.push_back(l.to_string());
             while t.linhas.len() > 400 { t.linhas.pop_front(); }
         }
@@ -1327,7 +1373,13 @@ impl App {
                     if v["evento"] == "posts_atualizados" && v["lista"] == "roteiros" {
                         self.pedir(Pedido::Roteiros, "roteiros", json!({}));
                     }
-                    if v["evento"] == "biblioteca_atualizada" { self.biblioteca_atualizada(&v); }
+                    if v["evento"] == "biblioteca_atualizada" { self.x.progressos.remove("biblioteca"); self.biblioteca_atualizada(&v); }
+                    if v["evento"] == "progresso" {
+                        let chave = v["chave"].as_str().unwrap_or("").to_string();
+                        self.x.progressos.insert(chave, (v["rotulo"].as_str().unwrap_or("").to_string(),
+                            v["feito"].as_u64().unwrap_or(0) as u32, v["total"].as_u64().unwrap_or(0) as u32));
+                        self.versao += 1;
+                    }
                     if v["evento"] == "posts_atualizados" {
                         self.pedir(Pedido::Posts, "posts", json!({}));
                         self.pedir(Pedido::Cortes, "cortes", json!({}));
@@ -1642,7 +1694,7 @@ mod tests {
 
         // plugin normalizar num corte, até a tarefa terminar
         a.trocar_aba(Aba::Plugins);
-        a.rodar_plugin("normalizar-audio", Some(Alvo::Corte(corte)));
+        a.rodar_plugin("normalizar-audio", Some(Alvo::Corte(corte.clone())));
         esperar(&mut a, &|a| a.tarefas.iter().any(|t| t.fim.is_some()));
         let t = &a.tarefas[0];
         assert_eq!(t.fim, Some(true), "saída: {:?}", t.linhas);
@@ -1651,5 +1703,25 @@ mod tests {
         let norm = std::path::Path::new(&base).join(&corte).join("saidas").join(nome);
         assert!(norm.exists());
         let _ = std::fs::remove_file(norm);
+    }
+}
+
+/// O índice do tempo mais perto de `t` (quadros da tira).
+pub fn mais_perto(tempos: &[f32], t: f32) -> Option<usize> {
+    tempos.iter().enumerate().min_by(|a, b| (a.1 - t).abs().total_cmp(&(b.1 - t).abs())).map(|(i, _)| i)
+}
+
+#[cfg(test)]
+mod testes_progresso {
+    use super::ler_progresso;
+
+    #[test]
+    fn le_o_contador_das_tarefas() {
+        assert_eq!(ler_progresso("  [12/340] 31.3s de áudio em 21.2s · ETA 25 min"), Some((12, 340)));
+        assert_eq!(ler_progresso("[0/5] fala"), Some((0, 5)));
+        assert_eq!(ler_progresso("[v1 12.3–14.0] frase"), None);
+        assert_eq!(ler_progresso("lista [a] e depois [3/4] fim"), Some((3, 4)));
+        assert_eq!(ler_progresso("sem nada"), None);
+        assert_eq!(ler_progresso("[9/0]"), None);
     }
 }

@@ -168,8 +168,7 @@ impl App {
     /// O quadro mais perto do tempo `t`.
     pub fn cortes_ir(&mut self, t: f32) {
         let Some((tr, _)) = self.x.c.tira.as_ref() else { return };
-        let q = tr.tempos.iter().enumerate()
-            .min_by(|a, b| (a.1 - t).abs().total_cmp(&(b.1 - t).abs())).map_or(0, |(i, _)| i);
+        let q = crate::app::mais_perto(&tr.tempos, t).unwrap_or(0);
         self.cortes_quadro(q);
     }
 
@@ -302,12 +301,37 @@ impl App {
             Some(c) => (c.ini, Some(c.fim)),
             None => (self.x.c.tempo(), None),
         };
-        let (w, h) = self.x.c.tira.as_ref().map_or((16, 9), |(t, _)| (t.largura, t.altura));
+        let (w, h) = self.x.c.tira.as_ref().map_or((1, 1), |(t, _)| (t.largura, t.altura));
         let arq = self.base.join(&v);
         if let Err(e) = self.x.player.tocar(&arq, &v, ini, fim, w, h) {
             self.aviso = Some(format!("{e}; instale com: sudo pacman -S ffmpeg mpv"));
         }
         self.versao += 1;
+    }
+
+    /// Clique num quadro da tira: escolhe; tocando, o vídeo pula para ali (até o fim do corte
+    /// escolhido, se houver).
+    pub fn cortes_clicar_quadro(&mut self, i: usize) {
+        let v = self.x.c.video.as_ref().map(|m| m.caminho.clone()).unwrap_or_default();
+        let tocando = self.x.player.video.as_deref() == Some(v.as_str());
+        self.x.player.parar();
+        self.cortes_quadro(i);
+        if !tocando { return; }
+        let ini = self.x.c.tempo();
+        let fim = self.x.c.sel.and_then(|id| self.x.c.corte(id)).map(|c| c.fim).filter(|f| *f > ini + 0.2);
+        let (w, h) = self.x.c.tira.as_ref().map_or((1, 1), |(t, _)| (t.largura, t.altura));
+        let arq = self.base.join(&v);
+        if let Err(e) = self.x.player.tocar(&arq, &v, ini, fim, w, h) { self.aviso = Some(e); }
+    }
+
+    /// O quadro da tira que está no ar: o do player, se tocando este vídeo; senão o escolhido.
+    pub fn cortes_quadro_no_ar(&self) -> usize {
+        let q = self.x.c.quadro;
+        let v = self.x.c.video.as_ref().map(|m| m.caminho.as_str()).unwrap_or("");
+        match (self.x.player.video.as_deref() == Some(v), self.x.player.tempo(), self.x.c.tira.as_ref()) {
+            (true, Some(t), Some((tr, _))) => crate::app::mais_perto(&tr.tempos, t).unwrap_or(q),
+            _ => q,
+        }
     }
 
     /// O player chegou ao fim do trecho: a tira vai até onde ele parou.

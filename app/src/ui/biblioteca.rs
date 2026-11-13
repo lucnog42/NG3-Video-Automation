@@ -77,7 +77,8 @@ fn corpo(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit, filtros: El) -> El {
     }
     let mut meio = col().key(format!("grade-midia-{v:?}")).grow(1.0).min_w(0.0).h_full().px(22.0).py(16.0).gap(14.0)
         .scroll(ScrollSpec { stick_bottom: false })
-        .child(filtros);
+        .child(filtros)
+        .child(if s.x.b.sincronizando { super::barra_progresso(s, "biblioteca", t) } else { el() });
     let f = &vm.filtros;
     let cards = match f.modo {
         Modo::Pasta => Some(cards_pastas(s, v, t)),

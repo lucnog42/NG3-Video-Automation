@@ -272,7 +272,7 @@ fn rodape(s: &App, t: Tema) -> El {
     let de_posts = !matches!(s.aba, Aba::Acervo | Aba::Cortes | Aba::Importar);
     if !de_posts {
         let rodando = s.tarefas.iter().filter(|t| t.fim.is_none()).count();
-        let rot = if rodando > 0 { format!("tarefas · {rodando} rodando") } else { format!("tarefas {}", s.tarefas.len()) };
+        let rot = rotulo_tarefas(s);
         return r.h(40.0).child(spacer()).child(botao("ver-tarefas", rot, if rodando > 0 { t.alerta } else { t.dim },
                                                       s.tarefas_abertas, t, |s: &mut App| s.tarefas_abertas = !s.tarefas_abertas));
     }
@@ -288,7 +288,7 @@ fn rodape(s: &App, t: Tema) -> El {
     } else {
         r = r.child(spacer());
     }
-    let rot_tarefas = if rodando > 0 { format!("tarefas · {rodando} rodando") } else { format!("tarefas {}", s.tarefas.len()) };
+    let rot_tarefas = rotulo_tarefas(s);
     r = r.child(botao("ver-tarefas", rot_tarefas, if rodando > 0 { t.alerta } else { t.dim }, s.tarefas_abertas, t,
                       |s: &mut App| s.tarefas_abertas = !s.tarefas_abertas));
     let pode = n > 0 && s.ponte.is_some();
@@ -362,9 +362,39 @@ fn tarefas(s: &App, t: Tema) -> El {
                     let id = tf.id.clone();
                     botao(format!("cancel-{}", tf.id), "cancelar", t.erro, false, t, move |s: &mut App| s.cancelar_tarefa(&id))
                 } else { el() }))
+            .child(barra_tarefa(tf, t))
             .child(text(ultimas.join("\n")).font(tema::MONO.lh(16.0)).color(t.dim).selectable(true).wrap_anywhere()));
     }
     c
+}
+
+/// "tarefas · 1 rodando · 42%" (a média das que dizem quanto falta).
+fn rotulo_tarefas(s: &App) -> String {
+    let rodando: Vec<_> = s.tarefas.iter().filter(|t| t.fim.is_none()).collect();
+    if rodando.is_empty() { return format!("tarefas {}", s.tarefas.len()); }
+    let fr: Vec<f32> = rodando.iter().filter_map(|t| t.progresso).map(|(a, b)| a as f32 / b as f32).collect();
+    if fr.is_empty() { format!("tarefas · {} rodando", rodando.len()) }
+    else { format!("tarefas · {} rodando · {:.0}%", rodando.len(), 100.0 * fr.iter().sum::<f32>() / fr.len() as f32) }
+}
+
+/// A barra de uma tarefa que diz quanto já fez ("[12/340]" nas linhas), com o tempo que falta.
+fn barra_tarefa(tf: &crate::app::Tarefa, t: Tema) -> El {
+    let Some((a, b)) = tf.progresso else { return el() };
+    let cor = match tf.fim { None => t.acento, Some(true) => t.ok, Some(false) => t.erro };
+    let falta = if tf.fim.is_none() && !tf.eta.is_empty() { format!(" · faltam ~{}", tf.eta.trim_start_matches("~")) } else { String::new() };
+    row().w_full().gap(10.0).center_y()
+        .child(col().grow(1.0).min_w(0.0).child(comum::barra(a as f32 / b as f32, cor, t)))
+        .child(text(format!("{a} de {b}{falta}")).font(tema::PEQ).color(t.dim))
+}
+
+/// Barra de um processo lento do motor que não é tarefa (ex.: catalogar as fontes).
+pub fn barra_progresso(s: &App, chave: &str, t: Tema) -> El {
+    let Some((rot, a, b)) = s.x.progressos.get(chave) else { return el() };
+    let frac = if *b > 0 { *a as f32 / *b as f32 } else { 0.0 };
+    row().w_full().gap(10.0).center_y()
+        .child(text(rot.clone()).font(tema::PEQ).color(t.dim).truncate().max_w(320.0))
+        .child(col().grow(1.0).min_w(0.0).child(comum::barra(frac, t.acento, t)))
+        .child(text(if *b > 0 { format!("{a} de {b}") } else { "…".into() }).font(tema::PEQ).color(t.dim))
 }
 
 fn toast(msg: &str, t: Tema) -> El {

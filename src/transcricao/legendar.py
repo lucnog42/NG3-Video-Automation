@@ -484,6 +484,7 @@ def main() -> None:
         modelo(a.modelo, a.device)          # carrega antes de contar o tempo
     inicio = time.time()
     feitos = audio_s = erros = 0
+    print(f"  [0/{len(pendentes)}] começando", flush=True)          # a barra do painel já aparece
     with ThreadPoolExecutor(max_workers=max(1, a.workers)) as pool:
         futuros = {pool.submit(tarefa, v, opcoes): v for v in pendentes}
         for fut in as_completed(futuros):
@@ -492,7 +493,7 @@ def main() -> None:
             feitos += 1
             if r["status"] == "erro":
                 erros += 1
-                print(f"  ERRO {r['video']}: {r['erro'][:120]}", flush=True)
+                print(f"  [{feitos}/{len(pendentes)}] ERRO {r['video']}: {r['erro'][:120]}", flush=True)
             elif r["status"] == "ok":
                 audio_s += float(r["audio_s"] or 0)
                 decorrido = time.time() - inicio

@@ -175,7 +175,8 @@ def _status_inicial(importada: bool, tipo: str) -> str:
     return "revisado" if not importada and tipo == "video" else "novo"
 
 
-def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[dict] | None = None) -> dict:
+def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[dict] | None = None,
+                progresso=None) -> dict:
     """Põe no catálogo o que apareceu em cada fonte e marca o que sumiu. Devolve, por fonte,
     quantos novos, movidos e ausentes."""
     con = abrir(db)
@@ -188,6 +189,8 @@ def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[d
             feitos[f["id"]] = {"novos": 0, "movidos": 0, "ausentes": 0, "erro": "pasta inacessível"}
             continue
         importada = _e_importada(f)
+        if progresso:
+            progresso(f.get("nome") or f["id"], 0, 0, "lendo a pasta")
         entradas = _entradas(f)
         vistos = {e["caminho"] for e in entradas}
         ja = {r["caminho"]: r for r in con.execute(
@@ -196,7 +199,9 @@ def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[d
         sumidos = {r["hash_rapido"]: r for c, r in ja.items() if c not in vistos and r["hash_rapido"]}
         novos = movidos = 0
         imp_id = None
-        for e in entradas:
+        for k, e in enumerate(entradas, 1):
+            if progresso and (k % 200 == 0 or k == len(entradas)):
+                progresso(f.get("nome") or f["id"], k, len(entradas), "")
             r = ja.get(e["caminho"])
             if r is not None:
                 if r["ausente"]:

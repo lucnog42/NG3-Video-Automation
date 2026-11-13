@@ -181,7 +181,7 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
 
     let mut col_ = base.child(cab).child(tags_video).child(quadro).child(transporte);
     if let Some((tr, im)) = c.tira.as_ref() {
-        let fita = comum::fita("tira-cortes", im, tr.n, q, 46.0, t, |s: &mut App, i| s.cortes_quadro(i));
+        let fita = comum::fita("tira-cortes", im, tr.n, s.cortes_quadro_no_ar(), 46.0, t, |s: &mut App, i| s.cortes_clicar_quadro(i));
         col_ = col_.child(comum::rotulo("tira de quadros", t)).child(fita);
         if let Some(w) = largura {
             col_ = col_.child(linha_do_tempo(s, w, t));

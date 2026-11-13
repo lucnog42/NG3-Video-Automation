@@ -48,6 +48,8 @@ pub struct Extra {
     pub c: crate::cortes::CortesUi,
     /// o player embutido (cortes e preview)
     pub player: crate::player::Player,
+    /// processos lentos do motor fora da fila de tarefas (ex.: "biblioteca"): (rótulo, feito, total)
+    pub progressos: HashMap<String, (String, u32, u32)>,
 }
 
 impl Extra {
@@ -61,7 +63,7 @@ impl Extra {
             tema: TextEdit::new(""), formato: String::new(), duracao: 0, pensando_ideias: false, escrevendo: false,
             aprovando: false, textos: HashMap::new(), biblioteca: vec![],
             b: crate::midias::Biblioteca::novo_vazio(), c: crate::cortes::CortesUi::novo(),
-            player: crate::player::Player::novo(),
+            player: crate::player::Player::novo(), progressos: HashMap::new(),
         }
     }
 }
