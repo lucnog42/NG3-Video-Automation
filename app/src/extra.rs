@@ -44,6 +44,8 @@ pub struct Extra {
     pub biblioteca: Vec<MotionPronto>,
     /// catálogo de mídia: aba Acervo e fila de revisão do Importar (midias.rs)
     pub b: crate::midias::Biblioteca,
+    /// aba Cortes (cortes.rs)
+    pub c: crate::cortes::CortesUi,
 }
 
 impl Extra {
@@ -56,7 +58,7 @@ impl Extra {
             roteiros: vec![], ideias: vec![], formatos: vec![], funcoes: vec![], banco: Banco::default(), aberto: None,
             tema: TextEdit::new(""), formato: String::new(), duracao: 0, pensando_ideias: false, escrevendo: false,
             aprovando: false, textos: HashMap::new(), biblioteca: vec![],
-            b: crate::midias::Biblioteca::novo_vazio(),
+            b: crate::midias::Biblioteca::novo_vazio(), c: crate::cortes::CortesUi::novo(),
         }
     }
 }
@@ -320,6 +322,10 @@ impl App {
                 self.x.contagens.clear();
                 self.fontes_recarregar();
                 self.midias_ao_entrar(crate::midias::Vista::Fila);
+            }
+            Aba::Cortes => {
+                if self.x.fontes.is_empty() { self.fontes_recarregar(); }
+                self.cortes_ao_entrar();
             }
             Aba::Acervo => {
                 if self.x.fontes.is_empty() { self.fontes_recarregar(); }

@@ -20,6 +20,8 @@ pub enum Aba {
     Roteiros,
     /// todo o acervo junto (posts, cortes e pastas), com tags e fila de revisão
     Acervo,
+    /// cortes como anotação: vídeo, tira de quadros, linha do tempo e cortes propostos/manuais
+    Cortes,
     Importar,
     Plugins,
     Config,
@@ -27,13 +29,14 @@ pub enum Aba {
 
 impl Aba {
     /// abas sem lista de posts/cortes (roteiros, importar, plugins, configurações)
-    pub fn sem_lista(self) -> bool { matches!(self, Aba::Roteiros | Aba::Acervo | Aba::Importar | Aba::Plugins | Aba::Config) }
+    pub fn sem_lista(self) -> bool { matches!(self, Aba::Roteiros | Aba::Acervo | Aba::Cortes | Aba::Importar | Aba::Plugins | Aba::Config) }
     pub fn rotulo(self) -> &'static str {
         match self {
             Aba::Posts => "posts",
             Aba::Recomendados => "repost",
             Aba::Roteiros => "roteiros",
             Aba::Acervo => "acervo",
+            Aba::Cortes => "cortes",
             Aba::Importar => "importar",
             Aba::Plugins => "plugins",
             Aba::Config => "chaves e config",
@@ -368,7 +371,7 @@ impl App {
         self.visiveis = match self.aba {
             Aba::Posts => filtro::posts(&self.posts, &self.estados, &self.filtro),
             Aba::Recomendados => filtro::recomendados(&self.posts, &self.estados, &self.filtro),
-            Aba::Plugins | Aba::Config | Aba::Roteiros | Aba::Acervo | Aba::Importar => vec![],
+            Aba::Plugins | Aba::Config | Aba::Roteiros | Aba::Acervo | Aba::Cortes | Aba::Importar => vec![],
         };
         self.pagina = self.pagina.min(self.n_paginas() - 1);
         self.versao += 1;
@@ -1238,6 +1241,8 @@ impl App {
             }
             if dono == "inserir-motion" { self.motion_recarregar(); }
             if dono == "transcrever" { self.transcricao_terminou(); }
+            if dono == "cortes-cena" { self.x.c.propondo = false; self.cortes_contar();
+                if let Some(id) = self.x.c.video.as_ref().map(|m| m.id) { self.cortes_recarregar(id); } }
             if dono == "video-ia" && !ok { self.motion_recarregar(); }
             if v.get("recarregar").is_some() {
                 self.pedir(Pedido::Posts, "posts", json!({"recarregar": true}));
@@ -1301,6 +1306,8 @@ impl App {
                         self.aviso = Some(format!("catálogo de mídia: {erro}"));
                     }
                     Pedido::MidiaSincronizar => { self.x.b.sincronizando = false; self.aviso = Some(erro); }
+                    Pedido::CortePropor(_) => { self.x.c.propondo = false; self.aviso = Some(erro); }
+                    Pedido::CorteAcao => { self.aviso = Some(erro); self.cortes_recarregar_aberto(); }
                     Pedido::MotionSugerir(_) => {
                         if let Some(m) = self.motion.as_mut() { m.sugerindo = false; }
                         self.aviso = Some(erro);
@@ -1470,6 +1477,8 @@ impl App {
                  | Pedido::MotionHf(_) | Pedido::Biblioteca | Pedido::MotionReusar(_)) => self.resposta_extra(p, r),
             p @ (Pedido::Midias(..) | Pedido::MidiaIds(_) | Pedido::MidiaAcao(_) | Pedido::MidiaSincronizar
                  | Pedido::MidiaTranscrever(_) | Pedido::Tags) => self.resposta_midias(p, r),
+            p @ (Pedido::CortesDe(_) | Pedido::CortesSelecionados | Pedido::CortesContagem | Pedido::CorteTira(_)
+                 | Pedido::CorteQuadros(_) | Pedido::CortePropor(_) | Pedido::CorteAcao) => self.resposta_cortes(p, r),
             Pedido::ModeloAplicar(chave) => {
                 let txt = r["texto"].as_str().unwrap_or("").to_string();
                 if let Some((id, alvo)) = chave.split_once('#') {

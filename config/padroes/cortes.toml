@@ -1,0 +1,11 @@
+# Cortes propostos automaticamente (src/acervo/cortes.py). Cortes são anotações: o arquivo não muda.
+
+[fala]
+pausa_ideia = 1.2      # s de silêncio entre frases que separa uma ideia da seguinte
+minimo = 2.0           # s: ideia mais curta cola na vizinha
+maximo = 30.0          # s: ideia mais longa é quebrada na maior pausa
+folga = 0.15           # s antes da 1ª e depois da última palavra
+
+[cena]
+limiar = 27.0          # ContentDetector do PySceneDetect (menor = mais cortes)
+minimo = 1.5           # s: cena mais curta é juntada à anterior

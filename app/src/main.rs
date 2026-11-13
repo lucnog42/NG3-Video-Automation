@@ -12,6 +12,7 @@ mod extra;
 mod dados;
 mod filtro;
 mod midias;
+mod cortes;
 mod plugins;
 mod ponte;
 mod ui;
@@ -76,6 +77,18 @@ fn tecla(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
     use rune::Key;
     if matches!(ev.key, Key::Escape) && s.chave_aberta { s.chave_aberta = false; return true; }
     if tx.focused().is_some() { return false; }
+    if s.aba == app::Aba::Cortes && s.preview.is_none() {
+        match &ev.key {
+            Key::Left => s.cortes_passo(-1),
+            Key::Right => s.cortes_passo(1),
+            Key::Text(c) if c.eq_ignore_ascii_case("i") => s.cortes_entrada(),
+            Key::Text(c) if c.eq_ignore_ascii_case("o") => s.cortes_saida(),
+            Key::Text(c) if c == " " => s.cortes_tocar(),
+            Key::Escape => { s.x.c.sel = None; s.x.c.entrada = None; s.versao += 1; }
+            _ => return false,
+        }
+        return true;
+    }
     match (&ev.key, s.preview.is_some()) {
         (Key::Escape, true) => s.preview = None,
         (Key::Left, true) => s.passo_quadro(-1),
@@ -99,7 +112,7 @@ fn main() {
                   ("compacto", cenas::compacto), ("legenda", cenas::legenda), ("paginas", cenas::paginas),
                   ("roteiros", cenas::roteiros), ("importar", cenas::importar), ("clientes", cenas::clientes),
                   ("roteiro_projeto", cenas::roteiro_projeto), ("acervo", cenas::acervo), ("fila", cenas::fila),
-                  ("acervo_pastas", cenas::acervo_pastas), ("acervo_tags", cenas::acervo_tags)],
+                  ("acervo_pastas", cenas::acervo_pastas), ("acervo_tags", cenas::acervo_tags), ("cortes", cenas::cortes)],
         ..AppSpec::new("Video Automation NG3", (1360.0, 860.0), App::novo, ui::view)
     });
 }
@@ -388,6 +401,30 @@ mod cenas {
         s.x.b.acervo.filtros.subpasta = "_posts".into();
         carregar_biblioteca(s, crate::midias::Vista::Acervo, app::Aba::Acervo,
                             json!({"fonte": "posts", "subpasta": "_posts", "exata": true}));
+    }
+
+    /// Aba Cortes com um vídeo que já tem cortes (o primeiro da lista com cortes), um escolhido.
+    pub fn cortes(s: &mut App) {
+        s.x.b.cortes.filtros.tipo = "video".into();
+        s.x.b.cortes.filtros.transcricao = "sim".into();
+        carregar_biblioteca(s, crate::midias::Vista::Cortes, app::Aba::Cortes, json!({"tipo": "video", "transcricao": "sim"}));
+        let ids: Vec<i64> = s.x.b.cortes.itens.iter().map(|m| m.id).collect();
+        let r = chamar(&s.base, "cortes_de", json!({"midias": ids, "so_contagem": true}));
+        s.resposta_cortes(ponte::Pedido::CortesContagem, r);
+        let r = chamar(&s.base, "midias", json!({"filtros": {"tipo": "video", "fonte": "cortes", "busca": "fernando 20260326_090530"}, "limite": 1}));
+        let Some(m) = serde_json::from_value::<Vec<crate::dados::Midia>>(r["itens"].clone()).ok().and_then(|v| v.into_iter().next())
+            else { return };
+        s.x.c.video = Some(m.clone());
+        let r = chamar(&s.base, "cortes_de", json!({"midias": [m.id]}));
+        s.resposta_cortes(ponte::Pedido::CortesDe(m.id), r);
+        let r = chamar(&s.base, "tira", json!({"arquivo": m.caminho, "n": crate::cortes::QUADROS, "px": 120}));
+        s.resposta_cortes(ponte::Pedido::CorteTira(m.caminho.clone()), r);
+        if let Some((_, im)) = s.x.c.tira.as_ref() { let _ = im.wait(); }
+        let r = chamar(&s.base, "quadros", json!({"arquivo": m.caminho, "n": crate::cortes::QUADROS, "px": 720}));
+        s.resposta_cortes(ponte::Pedido::CorteQuadros(m.caminho.clone()), r);
+        if let Some(id) = s.x.c.cortes.first().map(|c| c.id) { s.cortes_selecionar(id); }
+        for im in s.x.c.imagens.values() { let _ = im.wait(); }
+        s.querem_miniatura.clear();
     }
 
     pub fn acervo_tags(s: &mut App) {

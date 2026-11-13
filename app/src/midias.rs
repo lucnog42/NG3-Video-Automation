@@ -17,6 +17,8 @@ pub enum Vista {
     Acervo,
     /// aba Importar: só as pastas apontadas, começando pela fila de revisão
     Fila,
+    /// aba Cortes: a lista de vídeos à esquerda
+    Cortes,
 }
 
 /// Como a grade mostra as mídias.
@@ -75,6 +77,7 @@ impl VistaMidia {
 pub struct Biblioteca {
     pub acervo: VistaMidia,
     pub fila: VistaMidia,
+    pub cortes: VistaMidia,
     pub tags: TagsMarca,
     pub nova_tag: TextEdit,
     /// renomear um arquivo (nome no catálogo) e o padrão do lote
@@ -94,7 +97,7 @@ pub struct Biblioteca {
 impl Biblioteca {
     pub fn novo_vazio() -> Biblioteca {
         Biblioteca {
-            acervo: VistaMidia::nova(""), fila: VistaMidia::nova("fila"), tags: TagsMarca::default(),
+            acervo: VistaMidia::nova(""), fila: VistaMidia::nova("fila"), cortes: VistaMidia::nova(""), tags: TagsMarca::default(),
             nova_tag: TextEdit::new(""), nome: TextEdit::new(""), nome_de: None, padrao: TextEdit::new("{pasta}_{n}"),
             separar: "auto".into(), refazer: false,
             sincronizando: false, janela_importar: false, ver_pastas: false,
@@ -104,10 +107,10 @@ impl Biblioteca {
 
 impl App {
     pub fn vista(&self, v: Vista) -> &VistaMidia {
-        match v { Vista::Acervo => &self.x.b.acervo, Vista::Fila => &self.x.b.fila }
+        match v { Vista::Acervo => &self.x.b.acervo, Vista::Fila => &self.x.b.fila, Vista::Cortes => &self.x.b.cortes }
     }
     fn vista_mut(&mut self, v: Vista) -> &mut VistaMidia {
-        match v { Vista::Acervo => &mut self.x.b.acervo, Vista::Fila => &mut self.x.b.fila }
+        match v { Vista::Acervo => &mut self.x.b.acervo, Vista::Fila => &mut self.x.b.fila, Vista::Cortes => &mut self.x.b.cortes }
     }
 
     fn filtros_json(&self, v: Vista) -> Value {
@@ -282,6 +285,7 @@ impl App {
         match self.aba {
             Aba::Acervo => self.midias_ao_entrar(Vista::Acervo),
             Aba::Importar => self.midias_ao_entrar(Vista::Fila),
+            Aba::Cortes => self.midias_ao_entrar(Vista::Cortes),
             _ => {}
         }
     }
@@ -303,6 +307,7 @@ impl App {
                 vm.resumo = serde_json::from_value(r["resumo"].clone()).unwrap_or_default();
                 vm.carregando = false;
                 self.preparar_nome(v);
+                if v == Vista::Cortes { self.cortes_contar(); }
             }
             Pedido::MidiaIds(v) => {
                 let ids: Vec<i64> = serde_json::from_value(r["ids"].clone()).unwrap_or_default();

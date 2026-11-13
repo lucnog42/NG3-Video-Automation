@@ -3,6 +3,7 @@
 
 mod biblioteca;
 mod comum;
+mod cortes;
 mod grade;
 mod importar;
 mod lista;
@@ -38,6 +39,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             Aba::Roteiros => roteiros::aba(s, t, &k),
             Aba::Importar => importar::aba(s, t, &k),
             Aba::Acervo => biblioteca::aba_acervo(s, t, &k),
+            Aba::Cortes => cortes::aba(s, t, &k, cx.layout_size("tira-cortes").map(|v| v[0])),
             Aba::Plugins => plugins::aba(s, t, cx),
             Aba::Config => col().key("aba-config").w_full().grow(1.0).min_h(0.0).padding(24.0)
                 .scroll(ScrollSpec { stick_bottom: false }).fill(t.bg)
@@ -88,6 +90,7 @@ fn titulo(a: Aba) -> (&'static str, &'static str) {
         Aba::Posts => ("Posts", "Acervo publicado: pilar, data, curtidas e score"),
         Aba::Recomendados => ("Repost", "Ranking de reaproveitamento dos posts"),
         Aba::Acervo => ("Acervo", "Tudo junto: posts, cortes e pastas apontadas"),
+        Aba::Cortes => ("Cortes", "Preview e cortes: fala, cena e manual, como anotação"),
         Aba::Roteiros => ("Roteiros", "Roteiros a partir das falas transcritas"),
         Aba::Plugins => ("Plugins", "Plugins Luau, com os parâmetros de cada um"),
         Aba::Config => ("Chaves e config", "IA das sugestões, chaves de API e marca"),
@@ -116,6 +119,7 @@ fn lateral(s: &App, t: Tema) -> El {
         .child(item_nav(s, t, Some(Aba::Posts), "Posts", s.posts.len()))
         .child(item_nav(s, t, Some(Aba::Recomendados), "Repost", 0))
         .child(item_nav(s, t, Some(Aba::Acervo), "Acervo", s.x.b.acervo.resumo.passos.get("todos").copied().unwrap_or(0)))
+        .child(item_nav(s, t, Some(Aba::Cortes), "Cortes", 0))
         .child(item_nav(s, t, Some(Aba::Roteiros), "Roteiros", s.x.roteiros.len()))
         .child(item_nav(s, t, None, "Projetos", 0))
         .child(text("OUTRAS ABAS").font(tema::MINI).color(t.fraco).pt(14.0).pb(6.0).px(10.0))
@@ -265,7 +269,7 @@ fn rodape(s: &App, t: Tema) -> El {
     let mut r = row().key("rodape").w_full().h(52.0).px(16.0).gap(10.0).center_y()
         .fill(t.card).border_sides([1.0, 0.0, 0.0, 0.0], t.linha);
     // Acervo e Importar têm seleção e ações próprias (painel de tags): aqui só as tarefas
-    let de_posts = !matches!(s.aba, Aba::Acervo | Aba::Importar);
+    let de_posts = !matches!(s.aba, Aba::Acervo | Aba::Cortes | Aba::Importar);
     if !de_posts {
         let rodando = s.tarefas.iter().filter(|t| t.fim.is_none()).count();
         let rot = if rodando > 0 { format!("tarefas · {rodando} rodando") } else { format!("tarefas {}", s.tarefas.len()) };

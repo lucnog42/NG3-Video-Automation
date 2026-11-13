@@ -268,6 +268,87 @@ def m_midia_transcrever(d):
     return {"cmd": cmd, "videos": len(vids), "separacao": separar.disponivel()}
 
 
+# ---------------------------------------------------------------- cortes (anotações)
+def _ids(d, chave="ids") -> list[int]:
+    ids = [int(i) for i in d.get(chave) or []]
+    if not ids:
+        raise ValueError("nada selecionado")
+    return ids
+
+
+def m_cortes_de(d):
+    """Os cortes dos vídeos (ids do catálogo) e a contagem por vídeo."""
+    from acervo import cortes
+    ids = [int(i) for i in d.get("midias") or []]
+    conta = {str(k): v for k, v in cortes.contagem(ids).items()}
+    return {"contagem": conta} if d.get("so_contagem") else {"cortes": cortes.listar(ids), "contagem": conta}
+
+
+def m_corte_propor(d):
+    """fala: na hora (lê a transcrição). cena: devolve o comando da tarefa (decodifica o vídeo)."""
+    from acervo import cortes
+    ids = _ids(d)
+    origem = str(d.get("origem") or "fala")
+    if origem == "fala":
+        r = cortes.propor(ids, "fala")
+        return {"resultado": r, "propostos": sum(x.get("propostos", 0) for x in r),
+                "sem_transcricao": sum(1 for x in r if x.get("erro") == "sem transcrição")}
+    if origem != "cena":
+        raise ValueError("origem é fala ou cena")
+    if not os.path.exists(caminhos.python_de("sep")):
+        raise ValueError(f"a detecção de cena usa o ambiente sep (PySceneDetect), que não existe em {caminhos.venv('sep')}")
+    lista = caminhos.dados("cortes", f"cenas_{dt.datetime.now():%Y%m%d_%H%M%S}_{len(ids)}.txt")
+    with open(lista + ".tmp", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(map(str, ids)) + "\n")
+    os.replace(lista + ".tmp", lista)
+    return {"cmd": ["python3", "src/acervo/cortes.py", "propor", "--origem", "cena", "--lista", lista]}
+
+
+def m_corte_criar(d):
+    from acervo import cortes
+    return {"id": cortes.criar(int(d["midia"]), float(d["ini"]), float(d["fim"]), str(d.get("nota") or ""))}
+
+
+def m_corte_editar(d):
+    from acervo import cortes
+    campos = {k: d[k] for k in ("ini", "fim", "titulo", "nota") if k in d}
+    cortes.editar(int(d["id"]), **campos)
+    return {"id": int(d["id"])}
+
+
+def m_corte_aceitar(d):
+    from acervo import cortes
+    return {"n": cortes.aceitar(_ids(d))}
+
+
+def m_corte_descartar(d):
+    from acervo import cortes
+    return {"n": cortes.descartar(_ids(d))}
+
+
+def m_corte_dividir(d):
+    from acervo import cortes
+    return {"ids": cortes.dividir(int(d["id"]), float(d["t"]))}
+
+
+def m_corte_juntar(d):
+    from acervo import cortes
+    return {"id": cortes.juntar(_ids(d))}
+
+
+def m_corte_tags(d):
+    from acervo import cortes
+    tags = [str(t) for t in d.get("tags") or [] if str(t).strip()]
+    if not tags:
+        raise ValueError("escolha uma tag")
+    return {"n": cortes.aplicar_tags(_ids(d), tags, bool(d.get("remover")))}
+
+
+def m_corte_copiar_tags(d):
+    from acervo import cortes
+    return {"n": cortes.copiar_tags_do_video(_ids(d))}
+
+
 def m_tags(_):
     from acervo import biblioteca
     return biblioteca.tags()
