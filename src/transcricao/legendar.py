@@ -184,6 +184,28 @@ def audio_para_asr(video: str, wav: str, opcoes: dict) -> tuple[str, dict]:
     return separar.preparar(video, wav, modo_separar(video, opcoes.get("separar", "")), regioes)
 
 
+def asr(audio: str, opcoes: dict):
+    """Roda o Whisper. Se a GPU ficar sem memória (outro app usando a placa de 4 GB), recarrega
+    o modelo na CPU e tenta de novo: mais lento, mas a tarefa não para."""
+    global _MODELO
+
+    def rodar():
+        segs, info = modelo(opcoes["modelo"], opcoes["device"]).transcribe(
+            audio, language="pt", beam_size=5, word_timestamps=True,
+            vad_filter=True, vad_parameters={"min_silence_duration_ms": 300},
+            condition_on_previous_text=False, temperature=[0.0, 0.2])
+        return list(segs), info          # gerador: tem de consumir aqui
+    try:
+        return rodar()
+    except RuntimeError as e:
+        if "out of memory" not in str(e).lower() or opcoes.get("device") == "cpu":
+            raise
+        print("  [modelo] a GPU ficou sem memória (outro programa usando a placa): seguindo na CPU", flush=True)
+        _MODELO = None
+        opcoes["device"] = "cpu"
+        return rodar()
+
+
 def transcrever(video: str, opcoes: dict) -> dict:
     wav = audio_do_video(video)
     if not wav:
@@ -194,11 +216,7 @@ def transcrever(video: str, opcoes: dict) -> dict:
     elif info_audio.get("erro"):
         print(f"  [voz] {info_audio['erro']}: usando o áudio original", flush=True)
     try:
-        segs, info = modelo(opcoes["modelo"], opcoes["device"]).transcribe(
-            audio, language="pt", beam_size=5, word_timestamps=True,
-            vad_filter=True, vad_parameters={"min_silence_duration_ms": 300},
-            condition_on_previous_text=False, temperature=[0.0, 0.2])
-        segmentos = list(segs)          # gerador: tem de consumir aqui
+        segmentos, info = asr(audio, opcoes)
         crus = ler_palavras(segmentos)
         palavras, refino = (refinar_pela_voz(crus, audio, opcoes.get("voz", True))
                             if crus else ([], {}))

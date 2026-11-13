@@ -97,7 +97,10 @@ def tem_musica(wav_ou_array, regioes_voz: list[tuple[float, float]] | None = Non
 
 # ------------------------------------------------------------ separação
 def disponivel() -> bool:
-    return os.path.exists(caminhos.python_de("sep"))
+    """O ambiente `sep` existe e já tem o audio-separator (a instalação leva minutos)."""
+    import glob
+    return os.path.exists(caminhos.python_de("sep")) and bool(
+        glob.glob(caminhos.venv("sep", "lib", "python3*", "site-packages", "audio_separator")))
 
 
 def _chave(video: str) -> str:
