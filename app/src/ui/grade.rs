@@ -3,7 +3,7 @@
 use super::comum::{botao, etiqueta, imagem, miniatura};
 use super::tema::{self, Tema};
 use crate::app::{Alvo, App, pilar_cor};
-use crate::dados::{data_br, duracao};
+use crate::dados::data_br;
 use rune::{Cursor, El, GrowthSpec, ScrollSpec, col, el, memo, row, spacer, text};
 
 pub const GAP: f32 = 12.0;
@@ -38,10 +38,7 @@ fn linha(s: &App, i: usize, t: Tema) -> El {
     let mut r = row().w_full().gap(GAP);
     for (k, w) in l.cards {
         let Some(&j) = pag.get(k) else { continue };
-        r = r.child(match s.aba {
-            crate::app::Aba::Cortes => card_corte(s, j, w, l.altura, t),
-            _ => card_post(s, j, w, l.altura, t),
-        });
+        r = r.child(card_post(s, j, w, l.altura, t));
     }
     r
 }
@@ -101,48 +98,5 @@ fn card_post(s: &App, j: usize, w: f32, h: f32, t: Tema) -> El {
             .cursor(Cursor::Pointer)
             .child(thumb).child(info)
             .on_press(move |s: &mut App| s.abrir_preview(Alvo::Post(abrir.clone())))
-    })
-}
-
-fn card_corte(s: &App, j: usize, w: f32, h: f32, t: Tema) -> El {
-    let c = &s.cortes[j];
-    let sel = s.selecao.contains(&c.arquivo);
-    let capa = c.capa().to_string();
-    let pronta = miniatura(s, Some(&capa)).is_some_and(|i| i.is_ready());
-    let arq = c.arquivo.clone();
-    let estreito = w < 200.0;
-    memo(format!("corte-{}", c.arquivo), (sel, pronta, c.projeto, w.round() as u32, h.round() as u32), || {
-        let a1 = arq.clone();
-        let mut thumb = el().w_full().h(h).fill(t.card2)
-            .child(imagem(miniatura(s, Some(&capa)), "▶ corte", t));
-        let mut selos = row().w_full().gap(6.0).padding(7.0).absolute(0.0, 0.0)
-            .child(etiqueta(if c.projeto { if estreito { "✓" } else { "PROJETO ✓" } } else { "fcproj" },
-                            if c.projeto { t.acento } else { t.dim }));
-        if c.videos.len() > 1 {
-            selos = selos.child(etiqueta(format!("{} vídeos", c.videos.len()), t.rep));
-        }
-        thumb = thumb.child(selos
-            .child(spacer())
-            .child(botao("sel", if sel { "✓" } else { "＋" }, t.acento, sel, t, move |s: &mut App| s.alternar_selecao(&a1))));
-        thumb = thumb.child(row().absolute(0.0, h - 30.0).w_full().padding(7.0)
-            .child(spacer()).child(etiqueta(duracao(c.seg), t.txt)));
-        let fala = if c.fala.is_empty() { "sem fala transcrita".to_string() } else { c.fala.clone() };
-        let mut info = col().w_full().gap(6.0).px(10.0).py(9.0)
-            .child(text(c.nome_arq.clone()).font(tema::NORMAL_M).color(t.txt).max_lines(2).wrap_anywhere());
-        let mut linha = row().w_full().gap(6.0).center_y()
-            .child(etiqueta(c.pilar.clone(), tema::cor_pilar(pilar_cor(&c.pilar))));
-        if !c.arquivo_projeto.is_empty() {
-            let p = c.arquivo_projeto.clone();
-            linha = linha.child(spacer()).child(botao("abrir", "abrir", t.alerta, false, t, move |s: &mut App| s.abrir_projeto(&p)));
-        }
-        info = info.child(linha);
-        let info = info.child(text(fala).font(tema::PEQ.lh(16.0)).color(t.dim).max_lines(if estreito { 4 } else { 3 }));
-        let abrir = arq.clone();
-        col().key(format!("corte-{}", c.arquivo)).w(w).min_w(0.0).radius(11.0).clip_rounded(11.0)
-            .fill(t.card).border(if sel { 2.0 } else { 1.0 }, if sel { t.acento } else { t.linha })
-            .hover(t.linha_forte.alpha(0.08))
-            .cursor(Cursor::Pointer)
-            .child(thumb).child(info)
-            .on_press(move |s: &mut App| s.abrir_preview(Alvo::Corte(abrir.clone())))
     })
 }

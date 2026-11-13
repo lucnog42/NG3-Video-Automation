@@ -8,7 +8,7 @@ use rune::{Cx, El, ScrollSpec, col, el, row, spacer, text};
 
 pub fn aba(s: &App, t: Tema, cx: &Cx<App>) -> El {
     let itens = s.itens_plugin(None);
-    let origem = if s.origem == crate::app::Aba::Cortes { "cortes" } else { "posts" };
+    let origem = "posts";
     let mut c = col().key("plugins").w_full().grow(1.0).min_h(0.0).px(16.0).py(14.0).gap(12.0)
         .scroll(ScrollSpec { stick_bottom: false })
         .child(text(format!("{} {} selecionados (na aba {}). Os plugins ficam em plugins/<nome>/init.luau (na raiz do projeto); \

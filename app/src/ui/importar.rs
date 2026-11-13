@@ -1,42 +1,86 @@
-//! Aba "importar": pastas de qualquer disco apontadas como fontes do cliente, sem cópia.
+//! Aba "importar": a fila de revisão das pastas apontadas (com o painel de tags) e a lista das
+//! pastas de qualquer disco apontadas como fontes do cliente, sem cópia.
 
-use super::comum::{botao, etiqueta, pastilha};
+use super::comum::{self, botao, etiqueta, pastilha, seg, seg_item};
 use super::tema::{self, Tema};
 use crate::app::App;
-use rune::{El, ScrollSpec, col, el, row, spacer, text};
+use rune::{Cursor, El, ScrollSpec, col, el, row, spacer, text};
 use rune_kit::TextInput;
 use serde_json::json;
 
+/// A aba: barra com "+ Importar pasta" e a troca entre a fila de revisão e as pastas apontadas.
 pub fn aba(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
-    let x = &s.x;
-    let mut c = col().key("importar").w_full().grow(1.0).min_h(0.0).px(16.0).py(14.0).gap(12.0)
-        .scroll(ScrollSpec { stick_bottom: false })
-        .on_drop_files(|s: &mut App, arquivos, _| s.soltar_pasta(arquivos))
-        .child(text(format!("Material de {}: pastas em qualquer disco, apontadas (nunca copiadas). O índice, as transcrições e \
-            as miniaturas ficam em dados/marcas/{}/; a pasta de origem não é tocada.", s.nome_cliente(), s.marca))
-            .font(tema::PEQ.lh(16.0)).color(t.dim).wrap());
+    let b = &s.x.b;
+    let barra = row().key("importar-barra").w_full().px(22.0).py(10.0).gap(10.0).center_y()
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
+        .child(row().key("importar-pasta").h(28.0).px(12.0).center_y().radius(6.0).fill(t.acento).cursor(Cursor::Pointer)
+            .child(text("+ Importar pasta").font(tema::PEQ_M).color(tema::tinta_acento()))
+            .on_press(|s: &mut App| s.x.b.janela_importar = true))
+        .child(seg("seg-importar", vec![
+            seg_item("imp-fila", "Fila de revisão", !b.ver_pastas, t, |s: &mut App| s.x.b.ver_pastas = false),
+            seg_item("imp-pastas", format!("Pastas apontadas {}", s.x.fontes.len()), b.ver_pastas, t,
+                     |s: &mut App| s.x.b.ver_pastas = true),
+        ], t))
+        .child(spacer())
+        .child(text("nada é copiado: as pastas são só apontadas").font(tema::PEQ).color(t.fraco));
+    let corpo = if b.ver_pastas { pastas(s, t) } else { super::biblioteca::fila(s, t, k) };
+    col().key("importar").w_full().grow(1.0).min_h(0.0)
+        .on_drop_files(|s: &mut App, arquivos, _| { s.soltar_pasta(arquivos); s.x.b.janela_importar = true; })
+        .child(barra)
+        .child(corpo)
+}
 
-    // adicionar
-    let mut tipos = row().w_full().gap(6.0).flex_wrap().center_y().child(text("tipo").font(tema::PEQ).color(t.dim));
-    for (id, desc) in &x.tipos {
+/// Janela "Importar pasta": caminho, nome e tipo. Os arquivos novos caem na fila de revisão.
+pub fn janela(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
+    let x = &s.x;
+    let mut tipos = row().w_full().gap(6.0).flex_wrap().center_y();
+    for (id, _) in &x.tipos {
         let id2 = id.clone();
         tipos = tipos.child(pastilha(format!("tipo-fonte-{id}"), id.clone(), x.novo_tipo == *id, t,
                                      move |s: &mut App| s.x.novo_tipo = id2.clone()));
-        if x.novo_tipo == *id {
-            tipos = tipos.child(text(desc.clone()).font(tema::PEQ).color(t.dim));
-        }
     }
-    c = c.child(col().key("fonte-nova").w_full().gap(8.0).padding(12.0).radius(9.0).fill(t.card2).border(1.0, t.linha)
-        .child(text("APONTAR UMA PASTA — cole o caminho ou arraste a pasta para esta aba").font(tema::MINI).color(t.dim))
-        .child(row().w_full().gap(8.0)
-            .child(TextInput::new(&x.nova_raiz).placeholder("/run/media/…/Depoimentos 2024")
-                .on_edit(|s: &mut App| &mut s.x.nova_raiz).build(k).key("fonte-raiz").grow(1.0))
-            .child(TextInput::new(&x.novo_nome).placeholder("nome (opcional)")
-                .on_edit(|s: &mut App| &mut s.x.novo_nome).build(k).key("fonte-nome").w(240.0)))
-        .child(row().w_full().gap(8.0).center_y()
-            .child(tipos.grow(1.0).min_w(0.0))
-            .child(botao("fonte-add", if x.adicionando { "apontando e indexando…" } else { "apontar pasta" }, t.acento,
-                         x.adicionando, t, |s: &mut App| { if !s.x.adicionando { s.fonte_adicionar() } }))));
+    let desc = x.tipos.iter().find(|(id, _)| *id == x.novo_tipo).map(|(_, d)| d.clone()).unwrap_or_default();
+    let painel = col().key("janela-importar").w(560.0).gap(12.0).padding(20.0).radius(12.0).fill(t.card).border(1.0, t.linha_forte)
+        .on_press(|_: &mut App| {})
+        .child(row().w_full().center_y()
+            .child(text("Importar pasta").font(tema::TITULO).color(t.txt))
+            .child(spacer())
+            .child(botao("imp-fechar", "fechar", t.dim, false, t, |s: &mut App| s.x.b.janela_importar = false)))
+        .child(text("Cole o caminho ou arraste a pasta para a aba Importar. Nada é copiado nem escrito nela: cada subpasta \
+                     vira tag com origem \"pasta\" e os arquivos novos entram na fila de revisão.")
+            .font(tema::PEQ.lh(16.0)).color(t.dim).wrap())
+        .child(comum::rotulo("pasta", t))
+        .child(TextInput::new(&x.nova_raiz).placeholder("/run/media/…/Viagem Nov 2026")
+            .on_edit(|s: &mut App| &mut s.x.nova_raiz).build(k).key("fonte-raiz").w_full())
+        .child(comum::rotulo("nome", t))
+        .child(TextInput::new(&x.novo_nome).placeholder("nome (opcional: usa o da pasta)")
+            .on_edit(|s: &mut App| &mut s.x.novo_nome).build(k).key("fonte-nome").w_full())
+        .child(comum::rotulo("tipo", t))
+        .child(tipos)
+        .child(text(desc).font(tema::PEQ).color(t.dim))
+        .child(row().w_full().gap(8.0).pt(6.0)
+            .child(spacer())
+            .child(botao("imp-cancelar", "cancelar", t.dim, false, t, |s: &mut App| s.x.b.janela_importar = false))
+            .child(row().key("fonte-add").h(28.0).px(14.0).center_y().radius(6.0)
+                .fill(if x.adicionando { t.card2 } else { t.acento }).cursor(Cursor::Pointer)
+                .child(text(if x.adicionando { "apontando e indexando…" } else { "importar" }).font(tema::PEQ_M)
+                    .color(if x.adicionando { t.dim } else { tema::tinta_acento() }))
+                .on_press(|s: &mut App| { if !s.x.adicionando { s.fonte_adicionar() } })));
+    col().key("camada-importar").w_full().h_full().absolute(0.0, 0.0).fill(rune::Color::BLACK.alpha(0.45))
+        .on_press(|s: &mut App| s.x.b.janela_importar = false)
+        .child(spacer())
+        .child(row().w_full().child(spacer()).child(painel).child(spacer()))
+        .child(spacer())
+}
+
+/// As pastas apontadas (e as fontes do acervo), com ligar, reindexar, contar, transcrever e tirar.
+fn pastas(s: &App, t: Tema) -> El {
+    let x = &s.x;
+    let mut c = col().key("importar-pastas").w_full().grow(1.0).min_h(0.0).px(22.0).py(16.0).gap(12.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(text(format!("Material de {}: pastas em qualquer disco, apontadas (nunca copiadas). O índice, as transcrições e \
+            as miniaturas ficam em dados/marcas/{}/; a pasta de origem não é tocada.", s.nome_cliente(), s.marca))
+            .font(tema::PEQ.lh(16.0)).color(t.dim).wrap());
 
     // lista
     if x.fontes.is_empty() {

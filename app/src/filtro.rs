@@ -1,6 +1,6 @@
 //! Busca e filtros da grade: funções puras, testáveis sem janela.
 
-use crate::dados::{Corte, Estados, Post};
+use crate::dados::{Estados, Post};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -96,18 +96,6 @@ fn filtrar_posts(lista: &[Post], estados: &Estados, f: &Filtro) -> Vec<usize> {
 pub fn recomendados(lista: &[Post], estados: &Estados, f: &Filtro) -> Vec<usize> {
     let mut v: Vec<usize> = filtrar_posts(lista, estados, &Filtro { status: Status::SemMarca, ..f.clone() });
     v.sort_by(|&a, &b| lista[b].score.total_cmp(&lista[a].score));
-    v
-}
-
-pub fn cortes(lista: &[Corte], f: &Filtro) -> Vec<usize> {
-    let mut v: Vec<usize> = lista.iter().enumerate().filter(|(_, c)| {
-        (f.pilares.is_empty() || f.pilares.contains(&c.pilar))
-            && (!f.so_sem_projeto || !c.projeto)
-            && casa_busca(&c.busca(), &f.busca)
-    }).map(|(i, _)| i).collect();
-    // cortes não têm curtidas nem score: antigos/recentes pelo nome do arquivo (data)
-    if f.ordem == Ordem::Antigos { v.sort_by(|&a, &b| lista[a].nome_arq.cmp(&lista[b].nome_arq)); }
-    if f.ordem == Ordem::Recentes { v.sort_by(|&a, &b| lista[b].nome_arq.cmp(&lista[a].nome_arq)); }
     v
 }
 

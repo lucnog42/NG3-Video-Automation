@@ -42,6 +42,8 @@ pub struct Extra {
     pub textos: HashMap<usize, TextEdit>,
     // motions prontos do cliente
     pub biblioteca: Vec<MotionPronto>,
+    /// catálogo de mídia: aba Acervo e fila de revisão do Importar (midias.rs)
+    pub b: crate::midias::Biblioteca,
 }
 
 impl Extra {
@@ -54,6 +56,7 @@ impl Extra {
             roteiros: vec![], ideias: vec![], formatos: vec![], funcoes: vec![], banco: Banco::default(), aberto: None,
             tema: TextEdit::new(""), formato: String::new(), duracao: 0, pensando_ideias: false, escrevendo: false,
             aprovando: false, textos: HashMap::new(), biblioteca: vec![],
+            b: crate::midias::Biblioteca::novo_vazio(),
         }
     }
 }
@@ -213,6 +216,9 @@ impl App {
             Pedido::FonteAcao(id) => {
                 if id == "+" {
                     self.x.adicionando = false;
+                    self.x.b.janela_importar = false;
+                    self.x.b.ver_pastas = false;
+                    self.x.b.sincronizando = true;
                     self.x.nova_raiz = TextEdit::new("");
                     self.x.novo_nome = TextEdit::new("");
                     self.aviso = Some(format!("pasta apontada: {} ({} arquivo(s) no índice). Nada foi copiado.",
@@ -313,6 +319,11 @@ impl App {
             Aba::Importar => {
                 self.x.contagens.clear();
                 self.fontes_recarregar();
+                self.midias_ao_entrar(crate::midias::Vista::Fila);
+            }
+            Aba::Acervo => {
+                if self.x.fontes.is_empty() { self.fontes_recarregar(); }
+                self.midias_ao_entrar(crate::midias::Vista::Acervo);
             }
             _ => {}
         }

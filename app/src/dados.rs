@@ -142,16 +142,6 @@ pub struct Corte {
 impl Corte {
     /// a mídia que representa a pasta na grade: o 1º vídeo
     pub fn capa(&self) -> &str { self.videos.first().map_or(self.arquivo.as_str(), |s| s.as_str()) }
-    pub fn proporcao(&self) -> f32 {
-        if self.w > 0 && self.h > 0 { self.w as f32 / self.h as f32 } else { 9.0 / 16.0 }
-    }
-    pub fn busca(&self) -> std::borrow::Cow<'_, str> {
-        if self.busca_txt.is_empty() {
-            format!("{} {} {}", self.tema, self.nome_arq, self.fala).to_lowercase().into()
-        } else {
-            self.busca_txt.as_str().into()
-        }
-    }
     pub fn preparar(&mut self) {
         self.busca_txt = format!("{} {} {}", self.tema, self.nome_arq, self.fala).to_lowercase();
     }
@@ -559,4 +549,133 @@ pub struct MotionPronto {
     pub item: String,
     #[serde(default)]
     pub dur: f32,
+}
+
+// ------------------------------------------------------------ biblioteca de mídia
+/// Uma tag numa mídia (`acervo/biblioteca.py`): origem `marca`, `livre` ou `pasta`; `por` diz
+/// quem pôs (`humano` ou `pasta`).
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TagMidia {
+    pub slug: String,
+    #[serde(default)]
+    pub nome: String,
+    #[serde(default)]
+    pub origem: String,
+    #[serde(default)]
+    pub categoria: String,
+    #[serde(default)]
+    pub por: String,
+}
+
+/// Um arquivo do catálogo: caminho relativo ao acervo ou absoluto numa pasta apontada.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Midia {
+    pub id: i64,
+    #[serde(default)]
+    pub fonte: String,
+    #[serde(default)]
+    pub caminho: String,
+    #[serde(default)]
+    pub nome: String,
+    #[serde(default)]
+    pub item: String,
+    #[serde(default)]
+    pub subpasta: String,
+    #[serde(default)]
+    pub tipo: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub pilar: String,
+    #[serde(default)]
+    pub data: String,
+    #[serde(default)]
+    pub mb: f32,
+    #[serde(default)]
+    pub tags: Vec<TagMidia>,
+}
+
+impl Midia {
+    pub fn na_fila(&self) -> bool { self.status != "revisado" }
+    pub fn tem_tag(&self, slug: &str) -> bool { self.tags.iter().any(|t| t.slug == slug) }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Importacao {
+    pub id: i64,
+    #[serde(default)]
+    pub fonte: String,
+    #[serde(default)]
+    pub quando: String,
+    #[serde(default)]
+    pub n: usize,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Contagem {
+    pub nome: String,
+    #[serde(default)]
+    pub n: usize,
+}
+
+/// As contagens dos filtros (cada grupo conta com os outros filtros aplicados).
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ResumoMidia {
+    #[serde(default)]
+    pub passos: BTreeMap<String, usize>,
+    #[serde(default)]
+    pub tipos: BTreeMap<String, usize>,
+    #[serde(default)]
+    pub fontes: BTreeMap<String, usize>,
+    #[serde(default)]
+    pub importacoes: Vec<Importacao>,
+    #[serde(default)]
+    pub subpastas: Vec<Contagem>,
+}
+
+/// Uma tag com quantas mídias a usam.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TagConta {
+    pub slug: String,
+    #[serde(default)]
+    pub nome: String,
+    #[serde(default)]
+    pub n: usize,
+    #[serde(default)]
+    pub origem: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct CategoriaTag {
+    pub slug: String,
+    #[serde(default)]
+    pub nome: String,
+    #[serde(default)]
+    pub multipla: bool,
+    #[serde(default)]
+    pub tags: Vec<TagConta>,
+}
+
+/// As tags da marca (tags.toml, por categoria) e as de pasta e livres do catálogo.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TagsMarca {
+    #[serde(default)]
+    pub categorias: Vec<CategoriaTag>,
+    #[serde(default)]
+    pub pasta: Vec<TagConta>,
+    #[serde(default)]
+    pub livres: Vec<TagConta>,
+}
+
+impl TagsMarca {
+    /// Todas, para o autocompletar: (slug, nome, de onde vem).
+    pub fn todas(&self) -> Vec<(&str, &str, String)> {
+        let mut v: Vec<(&str, &str, String)> = vec![];
+        for c in &self.categorias {
+            for t in &c.tags { v.push((&t.slug, &t.nome, c.nome.clone())); }
+        }
+        for t in &self.livres { v.push((&t.slug, &t.nome, "livre".into())); }
+        for t in &self.pasta { v.push((&t.slug, &t.nome, "pasta".into())); }
+        v
+    }
 }

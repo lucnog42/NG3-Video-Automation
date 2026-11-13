@@ -18,7 +18,8 @@ pub enum Aba {
     Recomendados,
     /// roteiros recomendados a partir das falas transcritas
     Roteiros,
-    Cortes,
+    /// todo o acervo junto (posts, cortes e pastas), com tags e fila de revisão
+    Acervo,
     Importar,
     Plugins,
     Config,
@@ -26,13 +27,13 @@ pub enum Aba {
 
 impl Aba {
     /// abas sem lista de posts/cortes (roteiros, importar, plugins, configurações)
-    pub fn sem_lista(self) -> bool { matches!(self, Aba::Roteiros | Aba::Importar | Aba::Plugins | Aba::Config) }
+    pub fn sem_lista(self) -> bool { matches!(self, Aba::Roteiros | Aba::Acervo | Aba::Importar | Aba::Plugins | Aba::Config) }
     pub fn rotulo(self) -> &'static str {
         match self {
             Aba::Posts => "posts",
             Aba::Recomendados => "repost",
             Aba::Roteiros => "roteiros",
-            Aba::Cortes => "cortes",
+            Aba::Acervo => "acervo",
             Aba::Importar => "importar",
             Aba::Plugins => "plugins",
             Aba::Config => "chaves e config",
@@ -367,8 +368,7 @@ impl App {
         self.visiveis = match self.aba {
             Aba::Posts => filtro::posts(&self.posts, &self.estados, &self.filtro),
             Aba::Recomendados => filtro::recomendados(&self.posts, &self.estados, &self.filtro),
-            Aba::Cortes => filtro::cortes(&self.cortes, &self.filtro),
-            Aba::Plugins | Aba::Config | Aba::Roteiros | Aba::Importar => vec![],
+            Aba::Plugins | Aba::Config | Aba::Roteiros | Aba::Acervo | Aba::Importar => vec![],
         };
         self.pagina = self.pagina.min(self.n_paginas() - 1);
         self.versao += 1;
@@ -384,10 +384,7 @@ impl App {
 
     /// Proporção (largura/altura) do item `i` de posts ou cortes, conforme a aba.
     pub fn proporcao(&self, i: usize) -> f32 {
-        match self.aba {
-            Aba::Cortes => self.cortes.get(i).map_or(1.0, |c| c.proporcao()),
-            _ => self.posts.get(i).map_or(1.0, |p| p.proporcao()),
-        }
+        self.posts.get(i).map_or(1.0, |p| p.proporcao())
     }
 
     /// As linhas da grade desta página (calculadas uma vez por versão/largura).
@@ -433,10 +430,7 @@ impl App {
     }
 
     pub fn selecionar_pagina(&mut self) {
-        let chaves: Vec<String> = self.na_pagina().iter().filter_map(|&i| match self.aba {
-            Aba::Cortes => self.cortes.get(i).map(|c| c.arquivo.clone()),
-            _ => self.posts.get(i).map(|p| p.nome.clone()),
-        }).collect();
+        let chaves: Vec<String> = self.na_pagina().iter().filter_map(|&i| self.posts.get(i).map(|p| p.nome.clone())).collect();
         let todas = chaves.iter().all(|c| self.selecao.contains(c));
         for c in chaves {
             if todas { self.selecao.remove(&c); } else { self.selecao.insert(c); }
@@ -461,10 +455,7 @@ impl App {
     }
 
     fn capa_de(&self, i: usize) -> Option<String> {
-        match self.aba {
-            Aba::Cortes => self.cortes.get(i).map(|c| c.capa().to_string()),
-            _ => self.posts.get(i).and_then(|p| p.capa().map(str::to_string)),
-        }
+        self.posts.get(i).and_then(|p| p.capa().map(str::to_string))
     }
 
     /// Chamado a cada tecla na busca; o filtro roda no `poll`, 180 ms depois da última.
@@ -489,10 +480,6 @@ impl App {
     pub fn trocar_aba(&mut self, aba: Aba) {
         if self.aba != aba {
             // a seleção é de posts ou de cortes: só some quando muda o tipo de item
-            let tipo = |a: Aba| match a { Aba::Cortes => 1, Aba::Plugins | Aba::Config | Aba::Roteiros | Aba::Importar => 2, _ => 0 };
-            if tipo(aba) != 2 && tipo(self.aba) != 2 && tipo(aba) != tipo(self.aba) {
-                self.selecao.clear();
-            }
             if !aba.sem_lista() { self.origem = aba; }
             self.aba = aba;
             self.refiltrar();
@@ -505,13 +492,11 @@ impl App {
         let posts: Vec<&Post> = match so {
             Some(Alvo::Post(n)) => self.post(n).into_iter().collect(),
             Some(Alvo::Corte(_) | Alvo::Roteiro(_)) => vec![],
-            None if self.origem != Aba::Cortes => self.selecao.iter().filter_map(|n| self.post(n)).collect(),
-            None => vec![],
+            None => self.selecao.iter().filter_map(|n| self.post(n)).collect(),
         };
         let cortes: Vec<&Corte> = match so {
             Some(Alvo::Corte(a)) => self.corte(a).into_iter().collect(),
             Some(Alvo::Post(_) | Alvo::Roteiro(_)) => vec![],
-            None if self.origem == Aba::Cortes => self.selecao.iter().filter_map(|a| self.corte(a)).collect(),
             None => vec![],
         };
         let mut v: Vec<Value> = posts.iter().map(|p| json!({
@@ -540,7 +525,7 @@ impl App {
     pub fn rodar_plugin(&mut self, id: &str, so: Option<Alvo>) {
         let itens = self.itens_plugin(so.as_ref());
         if itens.is_empty() {
-            self.aviso = Some("selecione posts ou cortes antes de rodar o plugin".into());
+            self.aviso = Some("selecione posts antes de rodar o plugin".into());
             return;
         }
         match self.plugins.rodar(id, itens) {
@@ -1208,12 +1193,7 @@ impl App {
     pub fn gerar_selecao(&mut self) {
         if self.selecao.is_empty() { return; }
         let itens: Vec<String> = self.selecao.iter().cloned().collect();
-        let dados = if self.aba == Aba::Cortes {
-            json!({"cortes": itens})
-        } else {
-            json!({"posts": itens})
-        };
-        self.pedir(Pedido::Gerar, "gerar", dados);
+        self.pedir(Pedido::Gerar, "gerar", json!({"posts": itens}));
         self.tarefas_abertas = true;
     }
 
@@ -1306,6 +1286,7 @@ impl App {
                     if v["evento"] == "posts_atualizados" && v["lista"] == "roteiros" {
                         self.pedir(Pedido::Roteiros, "roteiros", json!({}));
                     }
+                    if v["evento"] == "biblioteca_atualizada" { self.biblioteca_atualizada(&v); }
                     if v["evento"] == "posts_atualizados" {
                         self.pedir(Pedido::Posts, "posts", json!({}));
                         self.pedir(Pedido::Cortes, "cortes", json!({}));
@@ -1313,6 +1294,12 @@ impl App {
                 }
                 Chegada::Resposta { pedido, ok: false, erro, .. } => match pedido {
                     Pedido::Miniatura(m) => { self.falhas.insert(m); }
+                    Pedido::Midias(v, _) => {
+                        self.x.b.acervo.carregando &= v != crate::midias::Vista::Acervo;
+                        self.x.b.fila.carregando &= v != crate::midias::Vista::Fila;
+                        self.aviso = Some(format!("catálogo de mídia: {erro}"));
+                    }
+                    Pedido::MidiaSincronizar => { self.x.b.sincronizando = false; self.aviso = Some(erro); }
                     Pedido::MotionSugerir(_) => {
                         if let Some(m) = self.motion.as_mut() { m.sugerindo = false; }
                         self.aviso = Some(erro);
@@ -1480,6 +1467,8 @@ impl App {
                  | Pedido::FonteTranscrever(_) | Pedido::Roteiros | Pedido::RoteiroIdeias | Pedido::RoteiroEscrever
                  | Pedido::Roteiro(_) | Pedido::RoteiroAcao(_) | Pedido::RoteiroAprovar(_) | Pedido::RoteiroExportar(_)
                  | Pedido::MotionHf(_) | Pedido::Biblioteca | Pedido::MotionReusar(_)) => self.resposta_extra(p, r),
+            p @ (Pedido::Midias(..) | Pedido::MidiaIds(_) | Pedido::MidiaAcao(_) | Pedido::MidiaSincronizar
+                 | Pedido::Tags) => self.resposta_midias(p, r),
             Pedido::ModeloAplicar(chave) => {
                 let txt = r["texto"].as_str().unwrap_or("").to_string();
                 if let Some((id, alvo)) = chave.split_once('#') {
@@ -1504,8 +1493,6 @@ impl App {
         let n = self.selecao.len();
         match (self.aba, n) {
             (_, 0) => "nada selecionado".into(),
-            (Aba::Cortes, 1) => "1 corte".into(),
-            (Aba::Cortes, n) => format!("{n} cortes"),
             (_, 1) => "1 post".into(),
             (_, n) => format!("{n} posts"),
         }
@@ -1599,10 +1586,8 @@ mod tests {
         esperar(&mut a, &|a| a.miniaturas.contains_key(&capa));
 
         // plugin normalizar num corte, até a tarefa terminar
-        a.trocar_aba(Aba::Cortes);
-        a.alternar_selecao(&corte);
         a.trocar_aba(Aba::Plugins);
-        a.rodar_plugin("normalizar-audio", None);
+        a.rodar_plugin("normalizar-audio", Some(Alvo::Corte(corte)));
         esperar(&mut a, &|a| a.tarefas.iter().any(|t| t.fim.is_some()));
         let t = &a.tarefas[0];
         assert_eq!(t.fim, Some(true), "saída: {:?}", t.linhas);

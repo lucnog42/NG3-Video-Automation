@@ -50,7 +50,7 @@ def carregar(recarregar: bool = False) -> dict:
     Seções de compatibilidade que o código usa: `acervo` (raiz, posts, cortes, transcricoes,
     projetos, saidas — absolutos), `montagem` (logo, aberturas, endings, ending_padrao, musicas,
     modelo_fcproj, motion — absolutos), `legenda`, `claude`, `app` (cache absoluto), `marca`,
-    `pilares`, `termos`, `vocabulario`, `estilo`, `fontes`.
+    `pilares`, `termos`, `vocabulario`, `estilo`, `fontes`, `tags`.
     """
     global _CACHE
     if _CACHE is not None and not recarregar:
@@ -102,6 +102,7 @@ def carregar(recarregar: bool = False) -> dict:
     cfg["vocabulario"] = marca.get("vocabulario") or {}
     cfg["estilo"] = (marca.get("estilo") or {}).get("estilo") or {}
     cfg["regras"] = marca.get("regras") or {}
+    cfg["tags"] = marca.get("tags") or {}
     for k in ("legenda", "claude", "app"):
         if local.get(k):
             cfg[k] = _mesclar(cfg.get(k) or {}, local[k])

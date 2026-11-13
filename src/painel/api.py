@@ -135,6 +135,7 @@ def m_fonte_adicionar(d):
     from achar import indice
     f = fontes.adicionar(str(d.get("raiz") or ""), str(d.get("tipo") or ""), str(d.get("nome") or ""))
     n = indice.indexar(f["id"]).get(f["id"], 0)
+    _sincronizar_biblioteca(f["id"])           # os arquivos novos caem na fila de revisão
     return {**f, "indexados": n}
 
 
@@ -164,6 +165,79 @@ def m_fonte_transcrever(d):
     """Devolve o comando de transcrição; o app o põe na fila de tarefas (processo)."""
     from acervo import fontes
     return {"cmd": fontes.comando_transcrever(str(d["id"]))}
+
+
+# ---------------------------------------------------------------- biblioteca
+_BIBLIOTECA = {"sincronizando": False}
+
+
+def _sincronizar_biblioteca(so: str | None = None) -> bool:
+    """Varre as fontes em segundo plano (o acervo publicado leva segundos); no fim o app
+    recebe `biblioteca_atualizada` e pede a lista de novo."""
+    from acervo import biblioteca
+    if _BIBLIOTECA["sincronizando"]:
+        return False
+    _BIBLIOTECA["sincronizando"] = True
+
+    def rodar():
+        r = {}
+        try:
+            r = biblioteca.sincronizar(so)
+        except Exception as e:                     # pragma: no cover
+            r = {"erro": f"{type(e).__name__}: {e}"}
+        finally:
+            _BIBLIOTECA["sincronizando"] = False
+            emitir({"evento": "biblioteca_atualizada", "resultado": r})
+    threading.Thread(target=rodar, daemon=True).start()
+    return True
+
+
+def _filtros_midia(d: dict) -> dict:
+    f = d.get("filtros") or {}
+    return {k: f[k] for k in ("importadas", "fonte", "tipo", "importacao", "subpasta", "passo", "tags", "busca", "ordem")
+            if f.get(k) not in (None, "", [])}
+
+
+def m_midias(d):
+    """Uma página do catálogo (aba Acervo e fila do Importar), com as contagens dos filtros."""
+    from acervo import biblioteca
+    if not os.path.exists(biblioteca.caminho_db()):
+        _sincronizar_biblioteca()
+    f = _filtros_midia(d)
+    r = biblioteca.listar(f, int(d.get("limite") or 120), int(d.get("offset") or 0))
+    return {**r, "resumo": biblioteca.resumo(f), "sincronizando": _BIBLIOTECA["sincronizando"]}
+
+
+def m_midia_ids(d):
+    from acervo import biblioteca
+    return {"ids": biblioteca.ids(_filtros_midia(d))}
+
+
+def m_midia_sincronizar(d):
+    return {"comecou": _sincronizar_biblioteca(d.get("fonte") or None)}
+
+
+def m_midia_tags(d):
+    """Aplica (ou tira, com `remover`) tags a várias mídias de uma vez."""
+    from acervo import biblioteca
+    ids = [int(i) for i in d.get("ids") or []]
+    tags = [str(t) for t in d.get("tags") or [] if str(t).strip()]
+    if not ids or not tags:
+        raise ValueError("escolha mídias e ao menos uma tag")
+    return {"n": biblioteca.aplicar_tags(ids, tags, bool(d.get("remover")))}
+
+
+def m_midia_revisar(d):
+    from acervo import biblioteca
+    ids = [int(i) for i in d.get("ids") or []]
+    if not ids:
+        raise ValueError("nenhuma mídia selecionada")
+    return {"n": biblioteca.revisar(ids, bool(d.get("revisado", True)))}
+
+
+def m_tags(_):
+    from acervo import biblioteca
+    return biblioteca.tags()
 
 
 # ------------------------------------------------------------------ roteiros

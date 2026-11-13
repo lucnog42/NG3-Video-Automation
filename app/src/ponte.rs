@@ -72,6 +72,13 @@ pub enum Pedido {
     RoteiroExportar(String),
     MotionHf(String),
     Biblioteca,
+    // biblioteca de mídia (midias.rs): a vista que pediu e o número do pedido (respostas velhas são ignoradas)
+    Midias(crate::midias::Vista, u64),
+    MidiaIds(crate::midias::Vista),
+    /// aplicar ou tirar tags, marcar revisado
+    MidiaAcao(crate::midias::Vista),
+    MidiaSincronizar,
+    Tags,
     MotionReusar(String),
 }
 

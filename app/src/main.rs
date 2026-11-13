@@ -11,6 +11,7 @@ mod app;
 mod extra;
 mod dados;
 mod filtro;
+mod midias;
 mod plugins;
 mod ponte;
 mod ui;
@@ -94,10 +95,10 @@ fn main() {
         poll: Some(poll),
         on_key: Some(tecla),
         scenes: &[("demo", cenas::demo), ("preview", cenas::preview), ("config", cenas::config), ("video", cenas::video), ("chave", cenas::chave), ("motion", cenas::motion), ("recomendados", cenas::recomendados),
-                  ("cortes", cenas::cortes), ("plugins", cenas::plugins),
+                  ("plugins", cenas::plugins),
                   ("compacto", cenas::compacto), ("legenda", cenas::legenda), ("paginas", cenas::paginas),
                   ("roteiros", cenas::roteiros), ("importar", cenas::importar), ("clientes", cenas::clientes),
-                  ("roteiro_projeto", cenas::roteiro_projeto)],
+                  ("roteiro_projeto", cenas::roteiro_projeto), ("acervo", cenas::acervo), ("fila", cenas::fila)],
         ..AppSpec::new("Video Automation NG3", (1360.0, 860.0), App::novo, ui::view)
     });
 }
@@ -324,13 +325,6 @@ mod cenas {
         s.trocar_aba(app::Aba::Recomendados);
     }
 
-    pub fn cortes(s: &mut App) {
-        carregar(s);
-        s.trocar_aba(app::Aba::Cortes);
-        s.colunas = 4;
-        s.refiltrar();
-    }
-
     pub fn compacto(s: &mut App) {
         carregar(s);
         s.por_pagina = 0;
@@ -350,5 +344,38 @@ mod cenas {
     pub fn plugins(s: &mut App) {
         carregar(s);
         s.trocar_aba(app::Aba::Plugins);
+    }
+
+    /// Acervo e fila de revisão: só o catálogo (sem a lista de posts), com as miniaturas da página.
+    fn carregar_biblioteca(s: &mut App, v: crate::midias::Vista, aba: app::Aba, filtros: Value) {
+        let ping = chamar(&s.base, "ping", json!({}));
+        s.ler_marca(&ping);
+        s.carregando = false;
+        let r = chamar(&s.base, "fontes", json!({}));
+        s.resposta_extra(ponte::Pedido::Fontes, r);
+        s.aba = aba;
+        let r = chamar(&s.base, "tags", json!({}));
+        s.resposta_midias(ponte::Pedido::Tags, r);
+        let r = chamar(&s.base, "midias", json!({"filtros": filtros, "limite": crate::midias::POR_PAGINA}));
+        s.resposta_midias(ponte::Pedido::Midias(v, 0), r);
+        s.querem_miniatura.clear();
+        let caminhos: Vec<String> = s.vista(v).itens.iter().take(30).map(|m| m.caminho.clone()).collect();
+        for c in caminhos {
+            if let Some(p) = chamar(&s.base, "miniatura", json!({"arquivo": c})).as_str() {
+                let im = s.imagens.file(p, 220.0, 2.0);
+                let _ = im.wait();
+                s.miniaturas.insert(c, im);
+            }
+        }
+    }
+
+    pub fn acervo(s: &mut App) {
+        carregar_biblioteca(s, crate::midias::Vista::Acervo, app::Aba::Acervo, json!({}));
+        let ids: Vec<i64> = s.x.b.acervo.itens.iter().skip(1).step_by(3).take(3).map(|m| m.id).collect();
+        s.x.b.acervo.selecao.extend(ids);
+    }
+
+    pub fn fila(s: &mut App) {
+        carregar_biblioteca(s, crate::midias::Vista::Fila, app::Aba::Importar, json!({"importadas": true, "passo": "fila"}));
     }
 }

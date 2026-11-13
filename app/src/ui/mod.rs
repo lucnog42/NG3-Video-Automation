@@ -1,6 +1,7 @@
 //! A janela, no layout do mockup (`claude/mockup-painel-ng3.html`): lateral com a marca e as abas,
 //! cabeçalho com título e busca, filtros, conteúdo da aba, rodapé (seleção e tarefas), preview.
 
+mod biblioteca;
 mod comum;
 mod grade;
 mod importar;
@@ -27,7 +28,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
              Rode de dentro da pasta do acervo ou passe --acervo <pasta>.", s.base.display()), t),
         (_, true) => aviso_central("carregando o acervo…", t),
         _ => match s.aba {
-            Aba::Posts | Aba::Cortes => grade::grade(s, t)
+            Aba::Posts => grade::grade(s, t)
                 .on_layout(|s: &mut App, r| {
                     s.largura = r[2] - 32.0;
                     let c = grade::colunas(s.largura, s.tamanho);
@@ -36,6 +37,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             Aba::Recomendados => lista::recomendados(s),
             Aba::Roteiros => roteiros::aba(s, t, &k),
             Aba::Importar => importar::aba(s, t, &k),
+            Aba::Acervo => biblioteca::aba_acervo(s, t, &k),
             Aba::Plugins => plugins::aba(s, t, cx),
             Aba::Config => col().key("aba-config").w_full().grow(1.0).min_h(0.0).padding(24.0)
                 .scroll(ScrollSpec { stick_bottom: false }).fill(t.bg)
@@ -59,6 +61,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if let Some(p) = preview::preview(s, t, tira_w) {
         camadas.push(p);
     }
+    if s.x.b.janela_importar {
+        camadas.push(importar::janela(s, t, &k));
+    }
     if s.chave_aberta {
         camadas.push(painel_chave(s, t, &k));
     }
@@ -79,10 +84,10 @@ fn aviso_central(msg: &str, t: Tema) -> El {
 /// Nome e subtítulo de cada aba, no cabeçalho.
 fn titulo(a: Aba) -> (&'static str, &'static str) {
     match a {
-        Aba::Importar => ("Importar", "Fontes e pastas importadas"),
+        Aba::Importar => ("Importar", "Fila de revisão e tags"),
         Aba::Posts => ("Posts", "Acervo publicado: pilar, data, curtidas e score"),
         Aba::Recomendados => ("Repost", "Ranking de reaproveitamento dos posts"),
-        Aba::Cortes => ("Cortes", "Uma pasta de cortes vira um projeto"),
+        Aba::Acervo => ("Acervo", "Tudo junto: posts, cortes e pastas apontadas"),
         Aba::Roteiros => ("Roteiros", "Roteiros a partir das falas transcritas"),
         Aba::Plugins => ("Plugins", "Plugins Luau, com os parâmetros de cada um"),
         Aba::Config => ("Chaves e config", "IA das sugestões, chaves de API e marca"),
@@ -104,13 +109,13 @@ fn lateral(s: &App, t: Tema) -> El {
         .child(text(format!("{} ▾", s.nome_cliente())).font(tema::PEQ_M).color(t.txt).truncate().min_w(0.0))
         .on_press(|s: &mut App| s.x.clientes_aberto = !s.x.clientes_aberto);
 
-    let n_import = s.x.fontes.iter().filter(|f| f.origem == "importada").count();
+    let n_fila = s.x.b.fila.resumo.passos.get("fila").copied().unwrap_or(0);
     let nav = col().key("nav").w_full().gap(2.0)
-        .child(item_nav(s, t, Some(Aba::Importar), "Importar", n_import))
+        .child(item_nav(s, t, Some(Aba::Importar), "Importar", n_fila))
         .child(item_nav(s, t, None, "Tags da marca", 0))
         .child(item_nav(s, t, Some(Aba::Posts), "Posts", s.posts.len()))
         .child(item_nav(s, t, Some(Aba::Recomendados), "Repost", 0))
-        .child(item_nav(s, t, Some(Aba::Cortes), "Cortes", s.cortes.len()))
+        .child(item_nav(s, t, Some(Aba::Acervo), "Acervo", s.x.b.acervo.resumo.passos.get("todos").copied().unwrap_or(0)))
         .child(item_nav(s, t, Some(Aba::Roteiros), "Roteiros", s.x.roteiros.len()))
         .child(item_nav(s, t, None, "Projetos", 0))
         .child(text("OUTRAS ABAS").font(tema::MINI).color(t.fraco).pt(14.0).pb(6.0).px(10.0))
@@ -206,7 +211,6 @@ fn filtros(s: &App, t: Tema) -> El {
     if s.aba != Aba::Recomendados {
         let mut ord = vec![];
         for o in Ordem::TODAS {
-            if s.aba == Aba::Cortes && matches!(o, Ordem::Score | Ordem::Curtidas) { continue; }
             ord.push(seg_item(format!("ord-{}", o.rotulo()), o.rotulo(), s.filtro.ordem == o, t, move |s: &mut App| s.ordenar(o)));
         }
         let mut tam = vec![];
@@ -230,7 +234,7 @@ fn filtros(s: &App, t: Tema) -> El {
     }
 
     let mut grupos = row().w_full().gap(6.0).center_y().flex_wrap();
-    if s.aba != Aba::Cortes {
+    {
         let mut anos: Vec<&str> = s.posts.iter().map(|p| p.ano.as_str()).collect();
         anos.sort_unstable();
         anos.dedup();
@@ -242,11 +246,7 @@ fn filtros(s: &App, t: Tema) -> El {
         }
         grupos = grupos.child(el().w(1.0).h(18.0).mx(6.0).fill(t.linha_forte));
     }
-    let cont = if s.aba == Aba::Cortes {
-        filtro::contagem(s.cortes.iter().map(|c| c.pilar.as_str()))
-    } else {
-        filtro::contagem(s.posts.iter().map(|p| p.pilar.as_str()))
-    };
+    let cont = filtro::contagem(s.posts.iter().map(|p| p.pilar.as_str()));
     grupos = grupos.child(comum::rotulo("pilar", t).pr(2.0));
     for (p, n) in cont {
         let on = s.filtro.pilares.contains(&p);
@@ -263,10 +263,18 @@ fn rodape(s: &App, t: Tema) -> El {
     let n = s.selecao.len();
     let rodando = s.tarefas.iter().filter(|t| t.fim.is_none()).count();
     let mut r = row().key("rodape").w_full().h(52.0).px(16.0).gap(10.0).center_y()
-        .fill(t.card).border_sides([1.0, 0.0, 0.0, 0.0], t.linha)
-        .child(text(s.rotulo_selecao()).font(tema::NORMAL_M).color(if n > 0 { t.acento } else { t.dim }));
+        .fill(t.card).border_sides([1.0, 0.0, 0.0, 0.0], t.linha);
+    // Acervo e Importar têm seleção e ações próprias (painel de tags): aqui só as tarefas
+    let de_posts = !matches!(s.aba, Aba::Acervo | Aba::Importar);
+    if !de_posts {
+        let rodando = s.tarefas.iter().filter(|t| t.fim.is_none()).count();
+        let rot = if rodando > 0 { format!("tarefas · {rodando} rodando") } else { format!("tarefas {}", s.tarefas.len()) };
+        return r.h(40.0).child(spacer()).child(botao("ver-tarefas", rot, if rodando > 0 { t.alerta } else { t.dim },
+                                                      s.tarefas_abertas, t, |s: &mut App| s.tarefas_abertas = !s.tarefas_abertas));
+    }
+    r = r.child(text(s.rotulo_selecao()).font(tema::NORMAL_M).color(if n > 0 { t.acento } else { t.dim }));
     if n > 0 {
-        if s.aba != Aba::Cortes {
+        {
             r = r.child(text(format!("~{:.0} MB de projeto", s.mb_projeto())).font(tema::PEQ).color(t.dim));
         }
         r = r.child(botao("limpar-sel", "limpar seleção", t.dim, false, t, |s: &mut App| { s.selecao.clear(); s.versao += 1; }));
