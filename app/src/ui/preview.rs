@@ -20,8 +20,8 @@ pub fn preview(s: &App, t: Tema, tira_w: Option<f32>) -> Option<El> {
     Some(col().key("preview").w_full().h_full().absolute(0.0, 0.0).fill(rune::Color::BLACK.alpha(0.78))
         .scroll(rune::ScrollSpec { stick_bottom: false })
         .child(col().w_full().padding(24.0).items_center().child(folha))
-        .on_press(|s: &mut App| s.preview = None)
-        .modal(true, |s: &mut App| s.preview = None))
+        .on_press(|s: &mut App| { s.x.player.parar(); s.preview = None })
+        .modal(true, |s: &mut App| { s.x.player.parar(); s.preview = None }))
 }
 
 fn cabecalho(titulo: &str, sub: String, t: Tema) -> El {
@@ -29,7 +29,7 @@ fn cabecalho(titulo: &str, sub: String, t: Tema) -> El {
         .child(col().grow(1.0).min_w(0.0).gap(4.0)
             .child(text(titulo.to_string()).font(tema::TITULO).color(t.txt).selectable(true).wrap_anywhere())
             .child(text(sub).font(tema::PEQ).color(t.dim).wrap()))
-        .child(botao("fechar", "fechar  esc", t.dim, false, t, |s: &mut App| s.preview = None))
+        .child(botao("fechar", "fechar  esc", t.dim, false, t, |s: &mut App| { s.x.player.parar(); s.preview = None }))
 }
 
 fn corpo_post(s: &App, nome: &str, t: Tema, tira_w: Option<f32>) -> Option<El> {
@@ -208,18 +208,24 @@ fn painel_video(s: &App, videos: Vec<String>, t: Tema, tira_w: Option<f32>) -> E
         }
         c = c.child(abas);
     }
-    let quadro = match grande {
+    let tocando = s.x.player.video.as_deref() == Some(foco.as_str());
+    let quadro = if s.x.player.mostrando(&foco) {
+        el().w_full().h(420.0).radius(9.0).fill(rune::Color::BLACK)
+            .child(el().w_full().h_full().radius(9.0).pixels_fit(&s.x.player.pixels, SurfaceFit::Fit))
+    } else { match grande {
         Some(im) if im.is_ready() => el().w_full().h(420.0).radius(9.0).fill(rune::Color::BLACK)
             .child(el().w_full().h_full().radius(9.0).pixels_fit(im.pixels(), SurfaceFit::Fit)),
         _ => el().w_full().h(420.0).radius(9.0).fill(t.card2).center()
             .child(text("carregando quadro…").font(tema::PEQ).color(t.dim)),
-    };
+    } };
+    let tempo = s.x.player.tempo().filter(|_| tocando).unwrap_or(tempo);
     // legenda que está no ar nesse instante
     let falando: String = p.map(|p| p.palavras.iter().filter(|w| w.0 <= tempo + 1.2 && w.1 >= tempo - 0.2)
         .map(|w| w.2.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
     c = c.child(quadro);
     c = c.child(row().w_full().gap(10.0).center_y()
-        .child(botao("tocar", "▶ tocar com som (mpv)", t.acento, false, t, |s: &mut App| s.tocar()))
+        .child(botao("tocar", if tocando { "❚❚ pausar" } else { "▶ tocar" }, t.acento, tocando, t, |s: &mut App| s.tocar()))
+        .child(botao("tocar-mpv", "abrir no mpv", t.dim, false, t, |s: &mut App| s.tocar_no_mpv()))
         .child(botao("exportar", "exportar quadro (PNG)", t.txt, false, t, |s: &mut App| s.exportar_quadro()))
         .child(text(format!("{} / {}", duracao(tempo), duracao(dur))).font(tema::MONO).color(t.dim))
         .child(text(falando).font(tema::NORMAL).color(t.txt).grow(1.0).truncate()));

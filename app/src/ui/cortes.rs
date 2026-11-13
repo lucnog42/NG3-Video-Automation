@@ -148,11 +148,15 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
     let pronto = |k: usize| c.imagens.get(&k).filter(|i| i.is_ready());
     let grande = pronto(q).or_else(|| (1..8).find_map(|d| pronto(q.saturating_sub(d)).or_else(|| pronto(q + d))))
         .or_else(|| s.miniaturas.get(&m.caminho));
-    let quadro = match grande {
+    let tocando = s.x.player.video.as_deref() == Some(m.caminho.as_str());
+    let quadro = if s.x.player.mostrando(&m.caminho) {
+        el().w_full().h(340.0).radius(9.0).fill(Color::BLACK)
+            .child(el().w_full().h_full().radius(9.0).pixels_fit(&s.x.player.pixels, SurfaceFit::Fit))
+    } else { match grande {
         Some(im) if im.is_ready() => el().w_full().h(340.0).radius(9.0).fill(Color::BLACK)
             .child(el().w_full().h_full().radius(9.0).pixels_fit(im.pixels(), SurfaceFit::Fit)),
         _ => el().w_full().h(340.0).radius(9.0).fill(t.card2).center().child(text("carregando quadros…").font(tema::PEQ).color(t.dim)),
-    };
+    } };
     let n = c.tira.as_ref().map_or(0, |(tr, _)| tr.n);
     let marcando = c.entrada.is_some() && c.sel.is_none();
     let rot_i = if c.sel.is_some() { "I  entrada do corte aqui" } else { "I  entrada" };
@@ -161,7 +165,8 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
         .child(botao("ct-ini", "⏮", t.txt, false, t, |s: &mut App| s.cortes_quadro(0)))
         .child(botao("ct-ant", "◀ quadro", t.txt, false, t, |s: &mut App| s.cortes_passo(-1)))
         .child(row().key("ct-tocar").h(24.0).px(10.0).center_y().radius(6.0).fill(t.acento).cursor(Cursor::Pointer)
-            .child(text(if c.sel.is_some() { "▶ tocar o corte" } else { "▶ tocar daqui" }).font(tema::PEQ_M).color(tema::tinta_acento()))
+            .child(text(if tocando { "❚❚ pausar" } else if c.sel.is_some() { "▶ tocar o corte" } else { "▶ tocar daqui" })
+                .font(tema::PEQ_M).color(tema::tinta_acento()))
             .on_press(|s: &mut App| s.cortes_tocar()))
         .child(botao("ct-prox", "quadro ▶", t.txt, false, t, |s: &mut App| s.cortes_passo(1)))
         .child(botao("ct-fim", "⏭", t.txt, false, t, move |s: &mut App| s.cortes_quadro(n.saturating_sub(1))))
@@ -172,7 +177,7 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
             botao("ct-cancela", "cancelar entrada", t.dim, false, t, |s: &mut App| { s.x.c.entrada = None; s.versao += 1; })
         } else { el() })
         .child(spacer())
-        .child(text(format!("{} / {}", tempo(c.tempo()), tempo(c.duracao()))).font(tema::MONO).color(t.dim));
+        .child(text(format!("{} / {}", tempo(s.cortes_tempo()), tempo(c.duracao()))).font(tema::MONO).color(t.dim));
 
     let mut col_ = base.child(cab).child(tags_video).child(quadro).child(transporte);
     if let Some((tr, im)) = c.tira.as_ref() {
@@ -216,7 +221,7 @@ fn linha_do_tempo(s: &App, w: f32, t: Tema) -> El {
     if let Some(e) = c.entrada {
         l = l.child(el().absolute(x(e) - 1.0, 0.0).w(2.0).h(alto).fill(t.alerta));
     }
-    l.child(el().absolute(x(c.tempo()) - 1.0, 0.0).w(2.0).h(alto).fill(t.txt).inert())
+    l.child(el().absolute(x(s.cortes_tempo()) - 1.0, 0.0).w(2.0).h(alto).fill(t.txt).inert())
 }
 
 // ------------------------------------------------------------ lado direito

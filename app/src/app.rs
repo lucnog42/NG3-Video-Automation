@@ -725,16 +725,43 @@ impl App {
         self.tiras.get(v).and_then(|(t, _)| t.tempos.get(p.quadro).copied()).unwrap_or(0.0)
     }
 
-    /// Toca no mpv (som e imagem), a partir do quadro escolhido.
+    /// Toca no próprio painel (player embutido), a partir do quadro escolhido; de novo, pausa e
+    /// leva a tira até onde parou.
     pub fn tocar(&mut self) {
         let Some(v) = self.preview.as_ref().and_then(|p| p.video.clone()) else { return };
-        let t = self.tempo_do_quadro();
-        let caminho = self.base.join(&v);
-        match std::process::Command::new("mpv").arg(format!("--start={t:.2}")).arg("--force-window=yes")
-            .arg(&caminho).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
-            Ok(_) => {}
-            Err(e) => self.aviso = Some(format!("não abriu o mpv ({e}); instale com: sudo pacman -S mpv")),
+        if self.x.player.video.as_deref() == Some(v.as_str()) {
+            let t = self.x.player.tempo().unwrap_or(0.0);
+            self.x.player.parar();
+            self.ir_ao_tempo_preview(t);
+            return;
         }
+        let t = self.tempo_do_quadro();
+        let (w, h) = self.tiras.get(&v).map_or((16, 9), |(tr, _)| (tr.largura, tr.altura));
+        let caminho = self.base.join(&v);
+        if let Err(e) = self.x.player.tocar(&caminho, &v, t, None, w, h) {
+            self.aviso = Some(format!("{e}; instale com: sudo pacman -S ffmpeg mpv"));
+        }
+        self.versao += 1;
+    }
+
+    /// Abre no mpv, numa janela à parte (tela cheia, controles do mpv).
+    pub fn tocar_no_mpv(&mut self) {
+        let Some(v) = self.preview.as_ref().and_then(|p| p.video.clone()) else { return };
+        let t = self.x.player.tempo().unwrap_or_else(|| self.tempo_do_quadro());
+        self.x.player.parar();
+        let caminho = self.base.join(&v);
+        if let Err(e) = std::process::Command::new("mpv").arg(format!("--start={t:.2}")).arg("--force-window=yes")
+            .arg(&caminho).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
+            self.aviso = Some(format!("não abriu o mpv ({e}); instale com: sudo pacman -S mpv"));
+        }
+    }
+
+    /// O quadro da tira do preview mais perto de `t`.
+    pub fn ir_ao_tempo_preview(&mut self, t: f32) {
+        let Some(v) = self.preview.as_ref().and_then(|p| p.video.clone()) else { return };
+        let q = self.tiras.get(&v).and_then(|(tr, _)| tr.tempos.iter().enumerate()
+            .min_by(|a, b| (a.1 - t).abs().total_cmp(&(b.1 - t).abs())).map(|(i, _)| i));
+        if let Some(q) = q { self.escolher_quadro(q); }
     }
 
     // ------------------------------------------------------------ chave da API

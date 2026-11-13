@@ -95,34 +95,45 @@ def candidatos(pasta: str, sid: str, n: int = 5, usar_ia: bool = False, db: str 
     s = _momento(pasta, sid)
     base = _termos(f"{s.get('texto', '')} {s.get('apoio', '')}")
     fala = _termos(_fala_ao_redor(s))
-    buscas: list[list[str]] = []
+    # (termos, peso): o que a pessoa escreveu no momento manda; a fala ao redor só completa
+    buscas: list[tuple[list[str], float]] = []
     ia_buscas: list[str] = []
     if usar_ia:
         ia_buscas = consultas_ia(pasta, s)
-        buscas += [_termos(b) or b.split() for b in ia_buscas]
+        buscas += [(_termos(b) or b.split(), p) for b, p in zip(ia_buscas, [1.0, 0.9, 0.8])]
     if base:
-        buscas.append(base)
+        buscas.append((base, 1.0))
     if fala:
-        buscas.append(fala[:10])
+        buscas.append((fala[:10], 0.5 if base else 0.9))
     vistos: dict[tuple, dict] = {}
-    for peso, termos in zip([1.0, 0.9, 0.8, 0.7, 0.6], buscas):
-        for r in indice.buscar(termos, 60, db):
+    todos_termos = [t for ts, _ in buscas for t in ts]
+    for termos, peso in buscas[:5]:
+        for r in indice.buscar(termos, 200, db):
             if _sobrepoe(r, s):
                 continue
             k = (r["arquivo"], round(float(r["ini"]), 1))
             r = {**r, "score": r["score"] * peso}
             if k not in vistos or vistos[k]["score"] < r["score"]:
                 vistos[k] = r
+    # variedade: no máximo 2 do mesmo item (post, pasta) e ~60% da mesma fonte, para a pasta
+    # bruta (milhares de arquivos) não tomar a lista inteira
     por_item: dict[str, int] = {}
+    por_fonte: dict[str, int] = {}
+    por_tipo: dict[str, int] = {}
+    teto_fonte = max(2, -(-n * 3 // 5))
+    ordem = sorted(vistos.values(), key=lambda r: -r["score"])
     escolhidos = []
-    for r in sorted(vistos.values(), key=lambda r: -r["score"]):
-        if por_item.get(r["item"], 0) >= 2:
+    for r in ordem:
+        if por_item.get(r["item"], 0) >= 2 or por_fonte.get(r["fonte"], 0) >= teto_fonte \
+                or por_tipo.get(r["tipo"], 0) >= teto_fonte + 1:
             continue
         por_item[r["item"]] = por_item.get(r["item"], 0) + 1
+        por_fonte[r["fonte"]] = por_fonte.get(r["fonte"], 0) + 1
+        por_tipo[r["tipo"]] = por_tipo.get(r["tipo"], 0) + 1
         cid = hashlib.sha1(f"{r['arquivo']}|{r['ini']}".encode()).hexdigest()[:10]
         escolhidos.append({"id": cid, "fonte": r["fonte"], "arquivo": r["arquivo"], "tipo": r["tipo"],
                            "ini": round(float(r["ini"]), 2), "fim": round(float(r["fim"]), 2),
-                           "item": r["item"], "texto": r["texto"][:160], "score": round(r["score"], 2)})
+                           "item": r["item"], "texto": r.get("trecho") or _trecho(r["texto"], todos_termos), "score": round(r["score"], 2)})
         if len(escolhidos) >= n:
             break
     for c in escolhidos:
@@ -131,9 +142,27 @@ def candidatos(pasta: str, sid: str, n: int = 5, usar_ia: bool = False, db: str 
     def mudar(x: dict) -> None:
         b = x.setdefault("broll", {})
         b["candidatos"] = escolhidos
-        b["buscas"] = ia_buscas or [" ".join(t) for t in buscas]
+        b["buscas"] = ia_buscas or [" ".join(t) for t, _ in buscas]
     momentos._mudar_momento(pasta, sid, mudar)
-    return {"candidatos": escolhidos, "buscas": ia_buscas or [" ".join(t) for t in buscas]}
+    return {"candidatos": escolhidos, "buscas": ia_buscas or [" ".join(t) for t, _ in buscas]}
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().lower()
+
+
+def _trecho(texto: str, termos: list[str], tam: int = 160) -> str:
+    """Até `tam` caracteres do texto em volta do primeiro termo encontrado (o motivo do encontro),
+    em vez do começo, que muitas vezes é outra fala."""
+    if len(texto) <= tam:
+        return texto
+    plano = _sem_acento(texto)
+    achados = [i for i in (plano.find(_sem_acento(t)) for t in termos if t) if i >= 0]
+    if not achados:
+        return texto[:tam]
+    ini = max(0, min(min(achados) - tam // 3, len(texto) - tam))
+    return ("…" if ini else "") + texto[ini:ini + tam]
 
 
 def sequencia(pasta: str, sid: str, itens: list[dict]) -> dict:

@@ -113,6 +113,7 @@ impl App {
     }
 
     pub fn cortes_abrir(&mut self, m: Midia) {
+        self.x.player.parar();
         let v = m.caminho.clone();
         let id = m.id;
         let c = self.cu();
@@ -182,7 +183,7 @@ impl App {
 
     /// I: com um corte escolhido, a entrada dele vai para o quadro atual; sem, marca o começo.
     pub fn cortes_entrada(&mut self) {
-        let t = self.x.c.tempo();
+        let t = self.cortes_tempo();
         match self.x.c.sel {
             Some(id) => self.corte_acao("corte_editar", json!({"id": id, "ini": t})),
             None => { self.x.c.entrada = Some(t); self.versao += 1; }
@@ -191,7 +192,7 @@ impl App {
 
     /// O: com um corte escolhido, ajusta a saída; com a entrada marcada, cria o corte manual.
     pub fn cortes_saida(&mut self) {
-        let t = self.x.c.tempo();
+        let t = self.cortes_tempo();
         if let Some(id) = self.x.c.sel {
             self.corte_acao("corte_editar", json!({"id": id, "fim": t}));
             return;
@@ -214,7 +215,7 @@ impl App {
 
     pub fn corte_dividir_aqui(&mut self) {
         let Some(id) = self.x.c.sel else { return };
-        let t = self.x.c.tempo();
+        let t = self.cortes_tempo();
         self.corte_acao("corte_dividir", json!({"id": id, "t": t}));
     }
 
@@ -281,20 +282,39 @@ impl App {
         self.pedir(Pedido::CortePropor(origem.into()), "corte_propor", json!({"ids": ids, "origem": origem}));
     }
 
-    /// Toca no mpv só o trecho do corte (ou, sem corte escolhido, do quadro atual em diante).
+    /// O tempo do cursor: o do player, se este vídeo estiver tocando; senão o do quadro da tira.
+    pub fn cortes_tempo(&self) -> f32 {
+        let v = self.x.c.video.as_ref().map(|m| m.caminho.as_str()).unwrap_or("");
+        if self.x.player.video.as_deref() == Some(v) { self.x.player.tempo().unwrap_or(0.0) } else { self.x.c.tempo() }
+    }
+
+    /// Espaço / ▶: toca no próprio painel o corte escolhido (ou do cursor em diante); de novo, pausa
+    /// onde está e leva a tira até ali.
     pub fn cortes_tocar(&mut self) {
         let Some(v) = self.x.c.video.as_ref().map(|m| m.caminho.clone()) else { return };
+        if self.x.player.video.as_deref() == Some(v.as_str()) {
+            let t = self.cortes_tempo();
+            self.x.player.parar();
+            self.cortes_ir(t);
+            return;
+        }
         let (ini, fim) = match self.x.c.sel.and_then(|id| self.x.c.corte(id)) {
             Some(c) => (c.ini, Some(c.fim)),
             None => (self.x.c.tempo(), None),
         };
-        let mut cmd = std::process::Command::new("mpv");
-        cmd.arg(format!("--start={ini:.2}")).arg("--force-window=yes");
-        if let Some(f) = fim { cmd.arg(format!("--end={f:.2}")); }
-        match cmd.arg(self.base.join(&v)).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn() {
-            Ok(_) => {}
-            Err(e) => self.aviso = Some(format!("não abriu o mpv ({e}); instale com: sudo pacman -S mpv")),
+        let (w, h) = self.x.c.tira.as_ref().map_or((16, 9), |(t, _)| (t.largura, t.altura));
+        let arq = self.base.join(&v);
+        if let Err(e) = self.x.player.tocar(&arq, &v, ini, fim, w, h) {
+            self.aviso = Some(format!("{e}; instale com: sudo pacman -S ffmpeg mpv"));
         }
+        self.versao += 1;
+    }
+
+    /// O player chegou ao fim do trecho: a tira vai até onde ele parou.
+    pub fn player_terminou(&mut self, t: f32) {
+        if self.preview.is_some() { self.ir_ao_tempo_preview(t); }
+        else if self.aba == crate::app::Aba::Cortes { self.cortes_ir(t); }
+        self.versao += 1;
     }
 
     fn corte_acao(&mut self, metodo: &str, dados: Value) {

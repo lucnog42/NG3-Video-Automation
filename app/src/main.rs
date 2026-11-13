@@ -13,6 +13,7 @@ mod dados;
 mod filtro;
 mod midias;
 mod cortes;
+mod player;
 mod plugins;
 mod ponte;
 mod ui;
@@ -68,6 +69,12 @@ fn poll(s: &mut App, agora: f64, tx: &mut Tx) -> bool {
         _ => {}
     }
     mudou |= s.plugins.poll(agora, tx);
+    // player embutido: o cursor e o tempo andam com o vídeo; no fim do trecho, para
+    if s.x.player.tocando() {
+        if let Some(t) = s.x.player.terminou() { s.player_terminou(t); }
+        tx.wake_after(Duration::from_millis(80));
+        mudou = true;
+    }
     mudou
 }
 
@@ -90,7 +97,8 @@ fn tecla(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     match (&ev.key, s.preview.is_some()) {
-        (Key::Escape, true) => s.preview = None,
+        (Key::Escape, true) => { s.x.player.parar(); s.preview = None }
+        (Key::Text(c), true) if c == " " => s.tocar(),
         (Key::Left, true) => s.passo_quadro(-1),
         (Key::Right, true) => s.passo_quadro(1),
         (Key::Left, false) => { let p = s.pagina.saturating_sub(1); s.ir_pagina(p, tx) }

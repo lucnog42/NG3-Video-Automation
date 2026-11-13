@@ -158,28 +158,54 @@ def precisa_indexar(db: str | None = None) -> bool:
     return any(f["id"] not in feitas or time.time() - feitas[f["id"]] > 12 * 3600 for f in fontes())
 
 
-def consulta_fts(termos: list[str]) -> str:
-    """Termos soltos -> uma consulta FTS5 com OR (cada termo entre aspas, sem operadores)."""
+def _termos_limpos(termos: list[str]) -> list[str]:
     limpos = []
     for t in termos:
         t = re.sub(r'["*^():]', " ", t).strip()
         if t and t.lower() not in ("and", "or", "not", "near"):
             limpos.append(f'"{t}"')
-    return " OR ".join(dict.fromkeys(limpos))
+    return list(dict.fromkeys(limpos))
+
+
+def consulta_fts(termos: list[str]) -> str:
+    """Termos soltos -> uma consulta FTS5 com OR (cada termo entre aspas, sem operadores)."""
+    return " OR ".join(_termos_limpos(termos))
 
 
 def buscar(termos: list[str], limite: int = 40, db: str | None = None) -> list[dict]:
-    q = consulta_fts(termos)
-    if not q:
+    """Primeiro o que tem **todos** os termos (AND), depois todos menos um, depois algum (OR).
+
+    Só OR não basta: a pasta bruta tem milhares de entradas cujo texto é o caminho, e um termo
+    comum ("treino") enche o resultado com a mesma pasta, escondendo o que bate com o resto da
+    frase ("Marcet", a fala). O que casa com tudo vem antes, com o score dobrado."""
+    limpos = _termos_limpos(termos)
+    if not limpos:
         return []
+    from itertools import combinations
+    consultas = []
+    if len(limpos) > 1:
+        consultas.append((" AND ".join(limpos), 2.0))
+    if 2 < len(limpos) <= 6:        # todos menos um: frase sem nenhum texto com tudo junto
+        consultas += [(" AND ".join(c), 1.5) for c in combinations(limpos, len(limpos) - 1)]
+    consultas.append((" OR ".join(limpos), 1.0))
     con = abrir(db)
-    try:
-        rs = con.execute(f"select {', '.join(COLUNAS)}, bm25(midias) from midias where midias match ? "
-                         "order by bm25(midias) limit ?", (q, limite)).fetchall()
-    except sqlite3.OperationalError:
-        rs = []
+    out: list[dict] = []
+    vistos: set[tuple] = set()
+    for q, peso in consultas:
+        try:
+            # snippet: a janela do texto com mais termos encontrados (o motivo do encontro)
+            rs = con.execute(f"select {', '.join(COLUNAS)}, snippet(midias, 0, '', '', '…', 28), bm25(midias) "
+                             "from midias where midias match ? order by bm25(midias) limit ?", (q, limite)).fetchall()
+        except sqlite3.OperationalError:
+            rs = []
+        for r in rs:
+            d = {**dict(zip(COLUNAS, r[:-2])), "trecho": r[-2], "score": -float(r[-1]) * peso}
+            k = (d["arquivo"], d["ini"])
+            if k not in vistos:
+                vistos.add(k)
+                out.append(d)
     con.close()
-    return [{**dict(zip(COLUNAS, r[:-1])), "score": -float(r[-1])} for r in rs]
+    return sorted(out, key=lambda d: -d["score"])[:limite]
 
 
 def main() -> None:

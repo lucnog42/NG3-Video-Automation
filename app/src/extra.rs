@@ -46,6 +46,8 @@ pub struct Extra {
     pub b: crate::midias::Biblioteca,
     /// aba Cortes (cortes.rs)
     pub c: crate::cortes::CortesUi,
+    /// o player embutido (cortes e preview)
+    pub player: crate::player::Player,
 }
 
 impl Extra {
@@ -59,6 +61,7 @@ impl Extra {
             tema: TextEdit::new(""), formato: String::new(), duracao: 0, pensando_ideias: false, escrevendo: false,
             aprovando: false, textos: HashMap::new(), biblioteca: vec![],
             b: crate::midias::Biblioteca::novo_vazio(), c: crate::cortes::CortesUi::novo(),
+            player: crate::player::Player::novo(),
         }
     }
 }
@@ -316,6 +319,7 @@ impl App {
 
     /// Ao entrar numa aba nova, o que ela precisa.
     pub fn ao_entrar(&mut self, aba: Aba) {
+        self.x.player.parar();             // trocar de aba para o vídeo que estava tocando
         match aba {
             Aba::Roteiros => self.roteiros_recarregar(),
             Aba::Importar => {
