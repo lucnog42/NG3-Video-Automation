@@ -1237,6 +1237,7 @@ impl App {
                 self.motion_recarregar();
             }
             if dono == "inserir-motion" { self.motion_recarregar(); }
+            if dono == "transcrever" { self.transcricao_terminou(); }
             if dono == "video-ia" && !ok { self.motion_recarregar(); }
             if v.get("recarregar").is_some() {
                 self.pedir(Pedido::Posts, "posts", json!({"recarregar": true}));
@@ -1468,7 +1469,7 @@ impl App {
                  | Pedido::Roteiro(_) | Pedido::RoteiroAcao(_) | Pedido::RoteiroAprovar(_) | Pedido::RoteiroExportar(_)
                  | Pedido::MotionHf(_) | Pedido::Biblioteca | Pedido::MotionReusar(_)) => self.resposta_extra(p, r),
             p @ (Pedido::Midias(..) | Pedido::MidiaIds(_) | Pedido::MidiaAcao(_) | Pedido::MidiaSincronizar
-                 | Pedido::Tags) => self.resposta_midias(p, r),
+                 | Pedido::MidiaTranscrever(_) | Pedido::Tags) => self.resposta_midias(p, r),
             Pedido::ModeloAplicar(chave) => {
                 let txt = r["texto"].as_str().unwrap_or("").to_string();
                 if let Some((id, alvo)) = chave.split_once('#') {

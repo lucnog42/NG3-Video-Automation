@@ -56,7 +56,7 @@ def garantir_venv() -> None:
         return
     except ImportError:
         pass
-    alvo = caminhos.raiz(".venv-asr", "bin", "python")
+    alvo = caminhos.python_de("asr")
     if os.path.exists(alvo) and os.path.realpath(sys.executable) != os.path.realpath(alvo):
         os.execv(alvo, [alvo, os.path.abspath(__file__)] + sys.argv[1:])
     sys.exit("precisa do .venv-asr (numpy + faster-whisper)")

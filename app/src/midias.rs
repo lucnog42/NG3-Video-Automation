@@ -42,6 +42,8 @@ pub struct FiltrosMidia {
     pub importacao: Option<i64>,
     pub subpasta: String,
     pub tags: Vec<String>,
+    /// "" | "sim" | "nao" (só vídeos)
+    pub transcricao: String,
 }
 
 pub struct VistaMidia {
@@ -79,6 +81,9 @@ pub struct Biblioteca {
     pub nome: TextEdit,
     pub nome_de: Option<i64>,
     pub padrao: TextEdit,
+    /// opções da tarefa de transcrever: separar a voz da música (auto | sempre | nunca) e refazer
+    pub separar: String,
+    pub refazer: bool,
     pub sincronizando: bool,
     /// janela "Importar pasta"
     pub janela_importar: bool,
@@ -91,6 +96,7 @@ impl Biblioteca {
         Biblioteca {
             acervo: VistaMidia::nova(""), fila: VistaMidia::nova("fila"), tags: TagsMarca::default(),
             nova_tag: TextEdit::new(""), nome: TextEdit::new(""), nome_de: None, padrao: TextEdit::new("{pasta}_{n}"),
+            separar: "auto".into(), refazer: false,
             sincronizando: false, janela_importar: false, ver_pastas: false,
         }
     }
@@ -109,6 +115,7 @@ impl App {
         let f = &vm.filtros;
         json!({"importadas": v == Vista::Fila, "tipo": f.tipo, "fonte": f.fonte, "passo": f.passo,
                "importacao": f.importacao, "subpasta": f.subpasta, "tags": f.tags, "busca": vm.busca.text.trim(),
+               "transcricao": f.transcricao,
                // por pasta: só o que está direto na pasta aberta (precisa de uma fonte escolhida)
                "exata": f.modo == Modo::Pasta && !f.fonte.is_empty()})
     }
@@ -233,6 +240,21 @@ impl App {
         if revisado && v == Vista::Fila { self.vista_mut(v).selecao.clear(); }
     }
 
+    /// Põe na fila de tarefas a transcrição dos vídeos selecionados (as imagens são ignoradas).
+    pub fn midia_transcrever(&mut self, v: Vista) {
+        let ids = self.ids_em_ordem(v);
+        if ids.is_empty() { return; }
+        self.pedir(Pedido::MidiaTranscrever(v), "midia_transcrever",
+                   json!({"ids": ids, "forcar": self.x.b.refazer, "separar": self.x.b.separar}));
+    }
+
+    /// Fim de uma tarefa de transcrição: atualiza "transcrito" na grade.
+    pub fn transcricao_terminou(&mut self) {
+        for v in [Vista::Acervo, Vista::Fila] {
+            if !self.vista(v).itens.is_empty() { self.midias_recarregar(v); }
+        }
+    }
+
     pub fn tags_recarregar(&mut self) { self.pedir(Pedido::Tags, "tags", json!({})); }
 
     pub fn midia_sincronizar(&mut self) {
@@ -294,6 +316,16 @@ impl App {
                 self.tags_recarregar();
             }
             Pedido::Tags => self.x.b.tags = serde_json::from_value(r).unwrap_or_default(),
+            Pedido::MidiaTranscrever(_) => {
+                let cmd: Vec<String> = serde_json::from_value(r["cmd"].clone()).unwrap_or_default();
+                let n = r["videos"].as_u64().unwrap_or(0);
+                let sep = if r["separacao"].as_bool() == Some(true) { "" }
+                          else { " · sem o ambiente de separação: usa o áudio original" };
+                if !cmd.is_empty() {
+                    self.rodar_processo("transcrever", cmd);
+                    self.aviso = Some(format!("transcrevendo {n} vídeo(s){sep} (veja as tarefas)"));
+                }
+            }
             Pedido::MidiaSincronizar => {
                 if r["comecou"].as_bool() == Some(true) {
                     self.aviso = Some("procurando arquivos novos nas fontes…".into());

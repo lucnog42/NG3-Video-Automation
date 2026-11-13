@@ -78,6 +78,8 @@ pub enum Pedido {
     /// aplicar ou tirar tags, marcar revisado
     MidiaAcao(crate::midias::Vista),
     MidiaSincronizar,
+    /// monta a tarefa de transcrever os vídeos selecionados
+    MidiaTranscrever(crate::midias::Vista),
     Tags,
     MotionReusar(String),
 }

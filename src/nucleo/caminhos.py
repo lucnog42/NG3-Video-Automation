@@ -5,6 +5,8 @@
     acervo()    a raiz do acervo publicado da marca (config/marcas/<marca>/acervo.toml)
     dados(...)  dados/marcas/<marca>/... — estado de trabalho, fora do git
     assets(...) assets/... — arquivos de apoio do projeto
+    venv(nome)  o ambiente Python de uma frente ("asr", "sep"): $NG3_VENV_ASR, [ambientes] do
+                config/local.toml (para deixar os GB de torch/CUDA noutro disco) ou .venv-<nome>
 """
 from __future__ import annotations
 
@@ -43,6 +45,23 @@ def dados(*partes: str) -> str:
 
 def assets(*partes: str) -> str:
     return raiz("assets", *partes)
+
+
+def venv(nome: str, *partes: str) -> str:
+    v = os.environ.get(f"NG3_VENV_{nome.upper()}")
+    if not v:
+        try:
+            import tomllib
+            with open(raiz("config", "local.toml"), "rb") as fh:
+                v = (tomllib.load(fh).get("ambientes") or {}).get(nome)
+        except (OSError, ValueError):
+            v = None
+    return os.path.join(os.path.expanduser(v) if v else raiz(f".venv-{nome}"), *partes)
+
+
+def python_de(nome: str) -> str:
+    """O python do ambiente `nome` (pode não existir: quem chama confere)."""
+    return venv(nome, "bin", "python")
 
 
 def resolver(valor: str, base: str) -> str:

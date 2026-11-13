@@ -195,7 +195,7 @@ def _sincronizar_biblioteca(so: str | None = None) -> bool:
 def _filtros_midia(d: dict) -> dict:
     f = d.get("filtros") or {}
     return {k: f[k] for k in ("importadas", "fonte", "tipo", "importacao", "subpasta", "exata", "passo", "tags", "busca",
-                              "ordem") if f.get(k) not in (None, "", [], False)}
+                              "ordem", "transcricao") if f.get(k) not in (None, "", [], False)}
 
 
 def m_midias(d):
@@ -242,6 +242,30 @@ def m_midia_renomear(d):
     if not ids:
         raise ValueError("nenhuma mídia selecionada")
     return {"nomes": biblioteca.renomear(ids, str(d.get("padrao") or ""), int(d.get("inicio") or 1))}
+
+
+def m_midia_transcrever(d):
+    """O comando que transcreve os vídeos selecionados (a lista vai num arquivo); o app o põe na
+    fila de tarefas. Já transcritos são pulados, salvo `forcar`. `separar`: auto | sempre | nunca."""
+    from acervo import biblioteca
+    from transcricao import separar
+    vids = biblioteca.videos([int(i) for i in d.get("ids") or []])
+    if not vids:
+        raise ValueError("nenhum vídeo na seleção (imagens não são transcritas)")
+    if not os.path.exists(caminhos.python_de("asr")):
+        raise ValueError(f"falta o ambiente da transcrição em {caminhos.venv('asr')}: crie com requirements-asr.txt "
+                         "(ou aponte outro lugar em [ambientes] asr = \"...\" no config/local.toml)")
+    modo = str(d.get("separar") or "auto")
+    if modo not in ("auto", "sempre", "nunca"):
+        raise ValueError("separar é auto, sempre ou nunca")
+    lista = caminhos.dados("transcricao", f"lista_{dt.datetime.now():%Y%m%d_%H%M%S}_{len(vids)}.txt")
+    with open(lista + ".tmp", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(vids) + "\n")
+    os.replace(lista + ".tmp", lista)
+    cmd = ["python3", "src/transcricao/legendar.py", "--lista", lista, "--aplicar", "--separar", modo]
+    if d.get("forcar"):
+        cmd.append("--forcar")
+    return {"cmd": cmd, "videos": len(vids), "separacao": separar.disponivel()}
 
 
 def m_tags(_):

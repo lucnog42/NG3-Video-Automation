@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from acervo import biblioteca  # noqa: E402
 
 CATEGORIAS = {"lugar": {"nome": "Lugar", "multipla": True, "tags": {"praia": "Praia", "estadio": "Estádio"}},
@@ -174,6 +175,17 @@ class Biblioteca(unittest.TestCase):
         self.assertEqual(r["01.jpg"]["status"], "novo")
         self.assertEqual(r["02.jpg"]["status"], "revisado")
         self.assertEqual(r["01.jpg"]["subpasta"], "_posts/x/imagens")
+
+    def test_filtro_e_contagem_de_transcritos(self):
+        self.sinc()
+        com = {os.path.join(self.pasta, "Treino/a.mp4")}
+        with mock.patch.object(biblioteca, "_tem_transcricao", side_effect=lambda c: c in com):
+            biblioteca.atualizar_transcritos(db=self.db)
+        self.assertEqual([i["original"] for i in self.lista(transcricao="sim")["itens"]], ["a.mp4"])
+        self.assertEqual(self.lista(transcricao="nao")["total"], 2)              # imagens ficam de fora
+        self.assertEqual(biblioteca.resumo({}, db=self.db)["transcricao"], {"sim": 1, "nao": 2})
+        ids = [i["id"] for i in self.lista()["itens"]]
+        self.assertEqual(len(biblioteca.videos(ids, db=self.db)), 3)
 
 
 if __name__ == "__main__":

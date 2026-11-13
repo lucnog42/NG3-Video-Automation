@@ -10,6 +10,11 @@ palavras e começa/termina no tempo real das palavras ditas.
     python3 src/transcricao/legendar.py --raiz _Cortes --aplicar
     python3 src/transcricao/legendar.py --raiz _posts --aplicar --desde 2025
     python3 src/transcricao/legendar.py --arquivo <um.mp4> --aplicar
+    python3 src/transcricao/legendar.py --lista <arquivo.txt> --aplicar --separar auto
+
+Antes do Whisper, a voz é separada da música quando houver música de fundo (`separar.py`;
+--separar auto|sempre|nunca, ou "separar" por fonte em fontes.json). O words.json guarda de que
+áudio veio (`audio.fonte`: "separada" | "original").
 
 Grava, ao lado de cada vídeo (posts: espelhado em `transcricoes/`):
     <video>.srt         cartelas de até 4 palavras
@@ -99,8 +104,8 @@ def libs_cuda() -> None:
     """
     import ctypes
     import glob
-    achados = sorted(glob.glob(caminhos.raiz(".venv-asr", "lib", "python3.*", "site-packages", "nvidia")))
-    base = achados[-1] if achados else caminhos.raiz(".venv-asr", "lib", "python3.11", "site-packages", "nvidia")
+    achados = sorted(glob.glob(caminhos.venv("asr", "lib", "python3.*", "site-packages", "nvidia")))
+    base = achados[-1] if achados else caminhos.venv("asr", "lib", "python3.11", "site-packages", "nvidia")
     for pacote in ("cublas", "cudnn"):
         d = os.path.join(base, pacote, "lib")
         if not os.path.isdir(d):
@@ -154,18 +159,48 @@ def audio_do_video(video: str) -> str | None:
     return alvo
 
 
+def modo_separar(video: str, pedido: str = "") -> str:
+    """--separar da tarefa; senão o "separar" da fonte do vídeo (fontes.json); senão o padrão."""
+    if pedido in ("auto", "sempre", "nunca"):
+        return pedido
+    from nucleo import config
+    alvo = os.path.abspath(video)
+    for f in config.carregar().get("fontes") or []:
+        r = f.get("raiz")
+        if r and alvo.startswith(os.path.abspath(r).rstrip(os.sep) + os.sep) and f.get("separar"):
+            return str(f["separar"])
+    return str((config.carregar().get("separacao") or {}).get("modo") or "auto")
+
+
+def audio_para_asr(video: str, wav: str, opcoes: dict) -> tuple[str, dict]:
+    """A voz isolada (se houver música e o ambiente de separação existir) ou o próprio wav."""
+    from transcricao import separar
+    regioes = None
+    if voz is not None:
+        try:
+            regioes = voz.analisar(wav).regioes
+        except Exception:
+            regioes = None
+    return separar.preparar(video, wav, modo_separar(video, opcoes.get("separar", "")), regioes)
+
+
 def transcrever(video: str, opcoes: dict) -> dict:
     wav = audio_do_video(video)
     if not wav:
         return {"erro": "sem áudio decodificável"}
+    audio, info_audio = audio_para_asr(video, wav, opcoes)
+    if info_audio.get("fonte") == "separada":
+        print(f"  [voz] música detectada ({info_audio.get('musica', '?')}): transcrevendo a voz separada", flush=True)
+    elif info_audio.get("erro"):
+        print(f"  [voz] {info_audio['erro']}: usando o áudio original", flush=True)
     try:
         segs, info = modelo(opcoes["modelo"], opcoes["device"]).transcribe(
-            wav, language="pt", beam_size=5, word_timestamps=True,
+            audio, language="pt", beam_size=5, word_timestamps=True,
             vad_filter=True, vad_parameters={"min_silence_duration_ms": 300},
             condition_on_previous_text=False, temperature=[0.0, 0.2])
         segmentos = list(segs)          # gerador: tem de consumir aqui
         crus = ler_palavras(segmentos)
-        palavras, refino = (refinar_pela_voz(crus, wav, opcoes.get("voz", True))
+        palavras, refino = (refinar_pela_voz(crus, audio, opcoes.get("voz", True))
                             if crus else ([], {}))
     except Exception as e:
         return {"erro": f"asr: {str(e)[:180]}"}
@@ -178,7 +213,8 @@ def transcrever(video: str, opcoes: dict) -> dict:
     if not palavras:
         return {"erro": "nenhuma palavra reconhecida"}
     return {"palavras": palavras, "crus": crus, "refino": refino, "duracao": info.duration,
-            "texto": " ".join(s.text.strip() for s in segmentos)}
+            "texto": " ".join(s.text.strip() for s in segmentos),
+            "audio": {**info_audio, "modelo_asr": opcoes["modelo"]}}
 
 
 def caminho_saida(video: str, ext: str) -> str:
@@ -210,13 +246,13 @@ def gravar(video: str, res: dict, opcoes: dict) -> None:
         shutil.copy2(srt, destino)
     escrever_srt(cartelas(res["palavras"]), srt)
     gravar_words(raiz_srt + ".words.json", video, res["duracao"], res["palavras"],
-                 res.get("crus"), res.get("refino"))
+                 res.get("crus"), res.get("refino"), res.get("audio"))
     with open(raiz_srt + ".txt", "w", encoding="utf-8") as fh:
         fh.write(res["texto"] + "\n")
 
 
 def gravar_words(caminho: str, video: str, duracao: float, palavras, crus=None,
-                 refino=None) -> None:
+                 refino=None, audio=None) -> None:
     """`palavras` = bordas já refinadas pela voz (é o que legenda usa);
     `palavras_whisper` = o que o modelo deu, guardado para refinar de novo
     sem rodar o ASR quando a regra mudar."""
@@ -227,6 +263,8 @@ def gravar_words(caminho: str, video: str, duracao: float, palavras, crus=None,
         dados["palavras_whisper"] = lista(crus)
     if refino:
         dados["refino"] = refino
+    if audio:
+        dados["audio"] = audio
     tmp = caminho + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(dados, fh, ensure_ascii=False)
@@ -312,10 +350,11 @@ def garantir_venv() -> None:
         return
     except ImportError:
         pass
-    alvo = caminhos.raiz(".venv-asr", "bin", "python")
+    alvo = caminhos.python_de("asr")
     if os.path.exists(alvo) and os.path.realpath(sys.executable) != os.path.realpath(alvo):
         os.execv(alvo, [alvo, os.path.abspath(__file__)] + sys.argv[1:])
-    sys.exit("faster-whisper ausente: crie o venv em .venv-asr (na raiz do projeto)")
+    sys.exit(f"faster-whisper ausente: crie o ambiente em {caminhos.venv('asr')} "
+             "(requirements-asr.txt; outro lugar: [ambientes] asr = \"...\" no config/local.toml)")
 
 
 def limpar_sem_fala() -> None:
@@ -352,6 +391,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raiz", action="append", default=[], help="_Cortes, _posts…")
     ap.add_argument("--arquivo", action="append", default=[], help="um vídeo (repita)")
+    ap.add_argument("--lista", help="arquivo com um vídeo por linha (a tarefa do painel)")
+    ap.add_argument("--separar", default="", choices=["", "auto", "sempre", "nunca"],
+                    help="separar a voz da música antes (padrão: o da fonte, senão separacao.modo)")
     ap.add_argument("--desde", type=int, help="só caminhos que contenham esse ano")
     ap.add_argument("--limite", type=int)
     ap.add_argument("--modelo", default="medium")
@@ -379,7 +421,11 @@ def main() -> None:
         if not os.path.isdir(raiz):
             sys.exit(f"raiz inexistente: {raiz}")
         videos += listar(raiz, a.desde)
-    for v in a.arquivo:
+    arquivos = list(a.arquivo)
+    if a.lista:
+        with open(a.lista, encoding="utf-8") as fh:
+            arquivos += [l.strip() for l in fh if l.strip()]
+    for v in arquivos:
         videos.append(v if os.path.isabs(v) else os.path.join(BASE, v))
     videos = sorted(set(videos))
     if a.limite:
@@ -412,7 +458,7 @@ def main() -> None:
 
     opcoes = {"modelo": a.modelo, "device": a.device, "so_srt": a.so_srt,
               "backup": not a.sem_backup, "forcar": a.forcar, "limpar_wav": True,
-              "voz": not a.sem_voz}
+              "voz": not a.sem_voz, "separar": a.separar}
     if a.so_srt:
         print("[--so-srt] refazendo os .srt a partir do words.json"
               + ("" if a.sem_voz else " · bordas medidas na voz"), flush=True)
@@ -441,6 +487,11 @@ def main() -> None:
             if feitos % 10 == 0:
                 gravar_fila(fila)
     gravar_fila(fila)
+    try:                                   # a aba Acervo mostra "transcrito" / "sem transcrição"
+        from acervo import biblioteca
+        biblioteca.atualizar_transcritos(pendentes)
+    except Exception as e:                 # pragma: no cover
+        print(f"  [catálogo] não atualizei: {str(e)[:100]}", flush=True)
     total = time.time() - inicio
     print(f"\n{feitos - erros} ok · {erros} erros · {audio_s / 60:.1f} min de áudio "
           f"em {total / 60:.1f} min ({audio_s / max(total, 1):.1f}x) · fila: {FILA}")

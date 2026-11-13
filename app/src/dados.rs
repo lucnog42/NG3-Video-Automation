@@ -583,6 +583,9 @@ pub struct Midia {
     pub original: String,
     #[serde(default)]
     pub renomeado: bool,
+    /// o vídeo tem transcrição (words.json)
+    #[serde(default)]
+    pub transcrito: bool,
     #[serde(default)]
     pub item: String,
     #[serde(default)]
@@ -631,6 +634,9 @@ pub struct ResumoMidia {
     pub passos: BTreeMap<String, usize>,
     #[serde(default)]
     pub tipos: BTreeMap<String, usize>,
+    /// vídeos: "sim" (transcritos) e "nao"
+    #[serde(default)]
+    pub transcricao: BTreeMap<String, usize>,
     #[serde(default)]
     pub fontes: BTreeMap<String, usize>,
     #[serde(default)]

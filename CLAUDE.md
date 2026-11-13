@@ -64,6 +64,9 @@ cp ~/.cache/ng3-target/release/ng3-painel ./ng3-painel
 
 Venvs separados de propósito: torch/onnxruntime-gpu da separação brigam com as versões fixas
 do ASR. O motor chama cada venv por subprocess, como `legendar.garantir_venv()` já faz.
+Os venvs podem morar noutro disco (torch/CUDA ocupam GB): `[ambientes] asr = "..."`, `sep = "..."`
+no `config/local.toml` ou `NG3_VENV_ASR`/`NG3_VENV_SEP`; o código pergunta a `caminhos.venv()`.
+Sem o `sep`, a transcrição segue com o áudio original (e o words.json registra o motivo).
 
 ## Como adicionar uma ação nova no painel
 

@@ -27,6 +27,7 @@ pub fn aba_acervo(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(busca)
         .child(seg_modo(s, v, t))
         .child(seg_tipo(s, v, t))
+        .child(seg_transcricao(s, v, t))
         .child(spacer())
         .child(seg_passo(s, v, t, &[("", "Todos"), ("fila", "Na fila"), ("sem_tags", "Sem tag"), ("revisado", "Revisados")]))
         .child(botoes_selecao(s, v, t));
@@ -47,6 +48,7 @@ pub fn fila(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(busca)
         .child(seg_modo(s, v, t))
         .child(seg_tipo(s, v, t))
+        .child(seg_transcricao(s, v, t))
         .child(spacer())
         .child(seg_passo(s, v, t, &[("fila", "Fila de revisão"), ("sem_tags", "Sem tag"), ("revisado", "Revisados"), ("", "Todos")]))
         .child(botoes_selecao(s, v, t));
@@ -237,6 +239,19 @@ fn cards_tags(s: &App, v: Vista, t: Tema) -> El {
     c
 }
 
+/// Vídeos transcritos ou sem transcrição (escolher um deles mostra só vídeos).
+fn seg_transcricao(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let n = |k: &str| vm.resumo.transcricao.get(k).copied().unwrap_or(0);
+    let item = |id: &'static str, rot: String| seg_item(format!("tr-{v:?}-{id}"), rot, vm.filtros.transcricao == id, t,
+                                                        move |s: &mut App| s.midia_filtro(v, |f| f.transcricao = id.into()));
+    seg(format!("seg-transc-{v:?}"), vec![
+        item("sim", format!("Transcritos {}", n("sim"))),
+        item("nao", format!("Sem transcrição {}", n("nao"))),
+        item("", "Qualquer".into()),
+    ], t)
+}
+
 fn seg_tipo(s: &App, v: Vista, t: Tema) -> El {
     let vm = s.vista(v);
     let n = |k: &str| vm.resumo.tipos.get(k).copied().unwrap_or(0);
@@ -306,6 +321,10 @@ fn card(s: &App, v: Vista, m: &Midia, t: Tema) -> El {
     let capa = el().w_full().h(THUMB_H).radius(6.0).clip_rounded(6.0).fill(t.card2)
         .child(comum::imagem(comum::miniatura(s, Some(&m.caminho)), tipo, t))
         .child(marca.absolute(8.0, 8.0))
+        .child(if m.tipo == "video" {
+            row().absolute(8.0, THUMB_H - 26.0).child(if m.transcrito { etiqueta("transcrito", t.ok) }
+                                                     else { etiqueta("sem transcrição", t.dim) })
+        } else { el() })
         .child(row().absolute(CARD_W - 16.0 - 8.0 - 44.0, THUMB_H - 26.0).w(44.0).child(spacer())
             .child(etiqueta(tipo, if m.tipo == "video" { t.rep } else { t.dim })));
 
@@ -412,7 +431,7 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
         }
     }
 
-    if n > 0 { p = p.child(renomear(s, v, t, k)); }
+    if n > 0 { p = p.child(renomear(s, v, t, k)).child(transcrever(s, v, t)); }
 
     // estado de uma tag no painel: com seleção, "todos os selecionados (da página) têm"; sem, "está no filtro"
     let ligada = |slug: &str| if n > 0 {
@@ -533,4 +552,41 @@ fn formatar(padrao: &str, m: &Midia, n: usize, largura: usize) -> String {
     let nome = nome.split_whitespace().collect::<Vec<_>>().join(" ");
     let tem_ext = nome.rfind('.').is_some_and(|i| i > 0 && i < nome.len() - 1);
     if nome.is_empty() || tem_ext { nome } else { format!("{nome}{ext}") }
+}
+
+/// A tarefa de transcrever os vídeos selecionados: separar a voz da música (automático, sempre
+/// ou nunca) e refazer os que já têm transcrição. Vai para a fila de tarefas.
+fn transcrever(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let b = &s.x.b;
+    let carregados: Vec<&Midia> = vm.selecionados().collect();
+    let videos = carregados.iter().filter(|m| m.tipo == "video").count();
+    let ja = carregados.iter().filter(|m| m.tipo == "video" && m.transcrito).count();
+    let fora_da_pagina = vm.selecao.len() > carregados.len();
+    if videos == 0 && !fora_da_pagina {
+        return col().w_full().gap(6.0).pt(4.0).child(comum::rotulo("transcrever", t))
+            .child(text("Nenhum vídeo na seleção: imagens não são transcritas.").font(tema::PEQ).color(t.fraco).wrap());
+    }
+    let sep = |id: &'static str, rot: &'static str| seg_item(format!("sep-{v:?}-{id}"), rot, b.separar == id, t,
+                                                             move |s: &mut App| s.x.b.separar = id.into());
+    let resumo = if fora_da_pagina { "os vídeos selecionados (inclusive de outras páginas)".to_string() }
+        else if ja > 0 && !b.refazer { format!("{} vídeo(s); {ja} já transcrito(s) serão pulados", videos) }
+        else { format!("{videos} vídeo(s)") };
+    let rotulo_botao = if fora_da_pagina { "transcrever os vídeos selecionados".to_string() }
+        else { format!("transcrever {}", if b.refazer { videos } else { videos - ja }) };
+    col().w_full().gap(8.0).pt(4.0)
+        .child(comum::rotulo("transcrever (gera as legendas)", t))
+        .child(row().w_full().gap(8.0).center_y()
+            .child(text("separar a música").font(tema::PEQ).color(t.dim))
+            .child(seg(format!("seg-sep-{v:?}"), vec![sep("auto", "se houver"), sep("sempre", "sempre"), sep("nunca", "nunca")], t)))
+        .child(pastilha(format!("refazer-{v:?}"), "refazer os já transcritos".into(), b.refazer, t,
+                        |s: &mut App| s.x.b.refazer = !s.x.b.refazer))
+        .child(text(resumo).font(tema::PEQ).color(t.fraco).wrap())
+        .child(row().w_full().child(spacer())
+            .child(row().key(format!("transcrever-{v:?}")).h(26.0).px(12.0).center_y().radius(6.0).fill(t.acento)
+                .cursor(Cursor::Pointer)
+                .child(text(rotulo_botao).font(tema::PEQ_M).color(tema::tinta_acento()))
+                .on_press(move |s: &mut App| s.midia_transcrever(v))))
+        .child(text("\"Se houver\" mede a música nas pausas da fala e só separa quando ela aparece. A tarefa roda \
+                     um vídeo por vez na GPU e aparece em tarefas.").font(tema::PEQ).color(t.fraco).wrap())
 }

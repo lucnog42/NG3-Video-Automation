@@ -15,6 +15,8 @@ pasta apontada) e as anotações.
   * cada subpasta da pasta importada vira tag com origem `pasta`;
   * arquivo movido dentro da fonte é reconhecido pelo hash rápido (tamanho + começo + fim)
     e só troca de caminho, sem perder as tags;
+  * `transcrito`: o vídeo tem words.json (conferido a cada sincronização e no fim de cada
+    tarefa de transcrição); vira filtro e etiqueta "transcrito" / "sem transcrição";
   * arquivo que sumiu (disco desmontado, apagado fora do app) fica marcado `ausente`, nunca
     apagado do catálogo: as tags voltam quando ele reaparece.
 
@@ -54,7 +56,7 @@ create table if not exists midia (
     item text default '', subpasta text default '', tipo text not null, tamanho integer default 0,
     hash_rapido text default '', status_import text not null default 'novo', pilar text default '',
     data text default '', ausente integer default 0, criado_em real, revisado_em real,
-    nome_exibicao text default '',
+    nome_exibicao text default '', transcrito integer default 0,
     unique (fonte_id, caminho));
 create index if not exists midia_status on midia (status_import);
 create index if not exists midia_hash on midia (hash_rapido);
@@ -81,7 +83,7 @@ def abrir(db: str | None = None) -> sqlite3.Connection:
     return con
 
 
-VERSAO = 2
+VERSAO = 3
 
 
 def _migrar(con: sqlite3.Connection) -> None:
@@ -92,6 +94,9 @@ def _migrar(con: sqlite3.Connection) -> None:
     cols = {r[1] for r in con.execute("pragma table_info(midia)")}
     if "nome_exibicao" not in cols:
         con.execute("alter table midia add column nome_exibicao text default ''")
+    if "transcrito" not in cols:
+        con.execute("alter table midia add column transcrito integer default 0")
+        con.execute(f"pragma user_version = {min(v, 2)}")   # a próxima sincronização preenche
     if v < 2:
         # posts e cortes guardavam subpasta vazia: passa a ser a pasta do arquivo no acervo
         linhas = con.execute("select id, caminho from midia where subpasta = '' and caminho not like '/%'").fetchall()
@@ -231,10 +236,60 @@ def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[d
                 ausentes += 1
         if imp_id is not None:
             con.execute("update importacao set n = ? where id = ?", (novos, imp_id))
+        _conferir_transcritos(con, f["id"])
         feitos[f["id"]] = {"novos": novos, "movidos": movidos, "ausentes": ausentes}
     con.commit()
     con.close()
     return feitos
+
+
+# ------------------------------------------------------------ transcrição
+def _tem_transcricao(caminho: str) -> bool:
+    try:
+        from transcricao import legendar
+    except Exception:                       # pragma: no cover
+        return False
+    alvo = caminho if os.path.isabs(caminho) else os.path.join(config.carregar()["acervo"]["raiz"], caminho)
+    return os.path.exists(legendar.caminho_saida(alvo, ".words.json"))
+
+
+def _conferir_transcritos(con: sqlite3.Connection, fonte: str | None = None, caminhos_: list[str] | None = None) -> int:
+    sql, args = "select id, caminho, transcrito from midia where tipo = 'video' and ausente = 0", []
+    if fonte:
+        sql += " and fonte_id = ?"
+        args.append(fonte)
+    linhas = con.execute(sql, args).fetchall()
+    if caminhos_ is not None:
+        acervo = config.carregar()["acervo"]["raiz"]
+        quer = {os.path.abspath(c) for c in caminhos_}
+        linhas = [r for r in linhas if os.path.abspath(r["caminho"] if os.path.isabs(r["caminho"])
+                                                       else os.path.join(acervo, r["caminho"])) in quer]
+    mudou = [(int(t), r["id"]) for r in linhas if (t := _tem_transcricao(r["caminho"])) != bool(r["transcrito"])]
+    con.executemany("update midia set transcrito = ? where id = ?", mudou)
+    return len(mudou)
+
+
+def atualizar_transcritos(caminhos_: list[str] | None = None, db: str | None = None) -> int:
+    """Confere de novo quem tem transcrição (todos os vídeos, ou só `caminhos_`)."""
+    if not os.path.exists(db or caminho_db()):
+        return 0
+    con = abrir(db)
+    n = _conferir_transcritos(con, caminhos_=caminhos_)
+    con.commit()
+    con.close()
+    return n
+
+
+def videos(ids: list[int], db: str | None = None) -> list[str]:
+    """Os caminhos dos vídeos entre `ids` (a tarefa de transcrever ignora as imagens)."""
+    ids = [int(i) for i in ids]
+    if not ids:
+        return []
+    con = abrir(db)
+    out = [r[0] for r in con.execute(f"select caminho from midia where tipo = 'video' and ausente = 0 "
+                                     f"and id in ({','.join('?' * len(ids))}) order by caminho", ids)]
+    con.close()
+    return out
 
 
 # --------------------------------------------------------------------- tags
@@ -387,6 +442,9 @@ def _filtros(f: dict) -> tuple[str, list]:
         sp = f["subpasta"].strip(os.sep)
         onde.append("(m.subpasta = ? or m.subpasta like ?)")
         args += [sp, sp + os.sep + "%"]
+    if f.get("transcricao") in ("sim", "nao"):
+        onde.append("m.tipo = 'video' and m.transcrito = ?")
+        args.append(1 if f["transcricao"] == "sim" else 0)
     passo = f.get("passo") or ""
     if passo == "fila":
         onde.append(f"m.status_import in ({','.join('?' * len(FILA))})")
@@ -436,6 +494,7 @@ def listar(filtros: dict | None = None, limite: int = 120, offset: int = 0, db: 
               "renomeado": bool(r["nome_exibicao"]),
               "item": r["item"], "subpasta": r["subpasta"], "tipo": r["tipo"], "status": r["status_import"],
               "pilar": r["pilar"], "data": r["data"], "mb": round((r["tamanho"] or 0) / 1e6, 1),
+              "transcrito": bool(r["transcrito"]),
               "tags": tags_de.get(r["id"], [])} for r in linhas]
     return {"itens": itens, "total": total}
 
@@ -456,7 +515,7 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
     Cada grupo conta com os outros filtros aplicados, menos o próprio."""
     f = dict(filtros or {})
     if not os.path.exists(db or caminho_db()):
-        return {"passos": {}, "tipos": {}, "importacoes": [], "subpastas": [], "fontes": {}}
+        return {"passos": {}, "tipos": {}, "transcricao": {}, "importacoes": [], "subpastas": [], "fontes": {}}
     con = abrir(db)
 
     def contar(sem: str, sql: str, por_linha):
@@ -470,6 +529,8 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
         passos[p or "todos"] = con.execute(f"select count(*) from midia m where {onde}", args).fetchone()[0]
     tipos = dict(contar("tipo", "select m.tipo, count(*) from midia m where {onde} group by m.tipo",
                         lambda r: (r[0], r[1])))
+    transc = dict(contar("transcricao", "select m.transcrito, count(*) from midia m where {onde} and m.tipo = 'video' "
+                                        "group by m.transcrito", lambda r: ("sim" if r[0] else "nao", r[1])))
     fontes_n = dict(contar("fonte", "select m.fonte_id, count(*) from midia m where {onde} group by m.fonte_id",
                            lambda r: (r[0], r[1])))
     imps = contar("importacao", "select i.id, i.fonte_id, i.data, count(m.id) from midia m join importacao i "
@@ -490,7 +551,7 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
         topo = resto.split(os.sep)[0]
         subs[topo] = subs.get(topo, 0) + n
     con.close()
-    return {"passos": passos, "tipos": tipos, "fontes": fontes_n, "importacoes": imps,
+    return {"passos": passos, "tipos": tipos, "transcricao": transc, "fontes": fontes_n, "importacoes": imps,
             "subpastas": [{"nome": k, "n": v} for k, v in sorted(subs.items(), key=lambda x: x[0].lower())]}
 
 
