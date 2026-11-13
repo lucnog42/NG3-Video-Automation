@@ -68,3 +68,30 @@ pub fn texto_bloco(titulo: &str, corpo: &str, t: Tema) -> El {
 pub fn miniatura<'a>(s: &'a App, rel: Option<&str>) -> Option<&'a Image> {
     rel.and_then(|r| s.miniaturas.get(r))
 }
+
+/// Controle segmentado do mockup (`.seg`): opções lado a lado numa caixa só.
+pub fn seg(chave: impl Into<String>, itens: Vec<El>, t: Tema) -> El {
+    let mut r = row().key(chave.into()).h(26.0).center_y().radius(6.0).border(1.0, t.linha_forte).clip_rounded(6.0);
+    for (i, it) in itens.into_iter().enumerate() {
+        if i > 0 {
+            r = r.child(el().w(1.0).h_full().fill(t.linha_forte));
+        }
+        r = r.child(it);
+    }
+    r
+}
+
+/// Uma opção de `seg`.
+pub fn seg_item(chave: impl Into<String>, rotulo: impl Into<String>, on: bool, t: Tema,
+                f: impl Fn(&mut App) + 'static) -> El {
+    row().key(chave.into()).h_full().px(10.0).center_y()
+        .fill(if on { t.acento.alpha(0.14) } else { Color::TRANSPARENT })
+        .hover(t.card2).cursor(Cursor::Pointer)
+        .child(text(rotulo.into()).font(if on { tema::PEQ_M } else { tema::PEQ }).color(if on { t.acento } else { t.dim }))
+        .on_press(f)
+}
+
+/// Rótulo pequeno em caixa alta antes de um grupo de controles (`.lbl` do mockup).
+pub fn rotulo(txt: &str, t: Tema) -> El {
+    text(txt.to_uppercase()).font(tema::MINI).color(t.fraco)
+}

@@ -13,7 +13,7 @@ pub use grade::GAP;
 
 use crate::app::{Aba, App, POR_PAGINA, Tamanho};
 use crate::filtro::{self, Ordem, Status};
-use comum::{botao, botao_tx, pastilha};
+use comum::{botao, botao_tx, pastilha, seg, seg_item};
 use rune::{Cursor, Cx, El, ScrollSpec, col, el, row, spacer, text};
 use rune_kit::TextInput;
 use tema::Tema;
@@ -179,69 +179,84 @@ fn cabecalho(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(acoes)
 }
 
-/// Pastilhas de filtro das abas com lista (posts, repost, cortes).
+/// Filtros das abas com lista (posts, repost, cortes), em duas linhas como no mockup:
+/// controles de exibição em cima (status, tipo, ordem, tamanho, por página), ano e pilar embaixo.
 fn filtros(s: &App, t: Tema) -> El {
-    let mut filtros = row().w_full().gap(8.0).center_y().flex_wrap();
-    {
-        if s.aba != Aba::Cortes {
-            // anos
-            let mut anos: Vec<&str> = s.posts.iter().map(|p| p.ano.as_str()).collect();
-            anos.sort_unstable();
-            anos.dedup();
-            for a in anos.into_iter().rev() {
-                let on = s.filtro.anos.contains(a);
-                let a2 = a.to_string();
-                filtros = filtros.child(pastilha(format!("ano-{a}"), a.to_string(), on, t, move |s: &mut App| s.alternar_ano(&a2)));
-            }
+    let mut controles = row().w_full().gap(10.0).center_y().flex_wrap();
+    if s.aba == Aba::Posts {
+        let mut st = vec![];
+        for x in Status::TODOS {
+            st.push(seg_item(format!("st-{}", x.rotulo()), x.rotulo(), s.filtro.status == x, t, move |s: &mut App| s.status(x)));
         }
-        // pilares (com contagem)
-        let cont = if s.aba == Aba::Cortes {
-            filtro::contagem(s.cortes.iter().map(|c| c.pilar.as_str()))
-        } else {
-            filtro::contagem(s.posts.iter().map(|p| p.pilar.as_str()))
-        };
-        for (p, n) in cont {
-            let on = s.filtro.pilares.contains(&p);
-            let p2 = p.clone();
-            filtros = filtros.child(pastilha(format!("pilar-{p}"), format!("{p} {n}"), on, t, move |s: &mut App| s.alternar_pilar(&p2)));
-        }
-        if s.aba == Aba::Posts {
-            for tipo in ["fcproj", "pcraft"] {
-                let on = s.filtro.tipo == tipo;
-                filtros = filtros.child(pastilha(format!("tipo-{tipo}"), tipo.into(), on, t, move |s: &mut App| {
-                    s.filtro.tipo = if s.filtro.tipo == tipo { String::new() } else { tipo.into() };
-                    s.refiltrar();
-                }));
-            }
-            for st in Status::TODOS {
-                filtros = filtros.child(pastilha(format!("st-{}", st.rotulo()), st.rotulo().into(), s.filtro.status == st, t,
-                                                 move |s: &mut App| s.status(st)));
-            }
-        }
-        // ordem e tamanho dos cards
-        if s.aba != Aba::Recomendados {
-            filtros = filtros.child(text("ordem").font(tema::PEQ).color(t.dim));
-            for o in Ordem::TODAS {
-                if s.aba == Aba::Cortes && matches!(o, Ordem::Score | Ordem::Curtidas) { continue; }
-                filtros = filtros.child(pastilha(format!("ord-{}", o.rotulo()), o.rotulo().into(), s.filtro.ordem == o, t,
-                                                 move |s: &mut App| s.ordenar(o)));
-            }
-            filtros = filtros.child(text("cards").font(tema::PEQ).color(t.dim));
-            for tm in Tamanho::TODOS {
-                filtros = filtros.child(pastilha(format!("tam-{}", tm.rotulo()), tm.rotulo().into(), s.tamanho == tm, t,
-                                                 move |s: &mut App| s.tamanho(tm)));
-            }
-        }
-        filtros = filtros
-            .child(pastilha("sem-projeto".into(), "só sem projeto".into(), s.filtro.so_sem_projeto, t, |s: &mut App| {
-                s.filtro.so_sem_projeto = !s.filtro.so_sem_projeto;
+        controles = controles.child(seg("seg-status", st, t));
+        let mut tp = vec![];
+        for tipo in ["fcproj", "pcraft"] {
+            tp.push(seg_item(format!("tipo-{tipo}"), tipo, s.filtro.tipo == tipo, t, move |s: &mut App| {
+                s.filtro.tipo = if s.filtro.tipo == tipo { String::new() } else { tipo.into() };
                 s.refiltrar();
-            }))
-            .child(botao("limpar", "limpar filtros", t.dim, false, t, |s: &mut App| s.limpar_filtros()))
-            ;
+            }));
+        }
+        controles = controles.child(seg("seg-tipo", tp, t));
     }
-    row().key("filtros").w_full().px(22.0).py(10.0).fill(t.bg).border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
-        .child(filtros)
+    controles = controles.child(pastilha("sem-projeto".into(), "só sem projeto".into(), s.filtro.so_sem_projeto, t, |s: &mut App| {
+        s.filtro.so_sem_projeto = !s.filtro.so_sem_projeto;
+        s.refiltrar();
+    }));
+    controles = controles.child(spacer());
+    if s.aba != Aba::Recomendados {
+        let mut ord = vec![];
+        for o in Ordem::TODAS {
+            if s.aba == Aba::Cortes && matches!(o, Ordem::Score | Ordem::Curtidas) { continue; }
+            ord.push(seg_item(format!("ord-{}", o.rotulo()), o.rotulo(), s.filtro.ordem == o, t, move |s: &mut App| s.ordenar(o)));
+        }
+        let mut tam = vec![];
+        for tm in Tamanho::TODOS {
+            tam.push(seg_item(format!("tam-{}", tm.rotulo()), tm.rotulo(), s.tamanho == tm, t, move |s: &mut App| s.tamanho(tm)));
+        }
+        let mut pp = vec![];
+        for n in POR_PAGINA {
+            let rot = if n == 0 { "todos".to_string() } else { n.to_string() };
+            pp.push(seg_item(format!("pp-{n}"), rot, s.por_pagina == n, t, move |s: &mut App| s.por_pagina(n)));
+        }
+        controles = controles
+            .child(row().gap(6.0).center_y().child(comum::rotulo("ordem", t)).child(seg("seg-ordem", ord, t)))
+            .child(row().gap(6.0).center_y().child(comum::rotulo("cards", t)).child(seg("seg-tam", tam, t)))
+            .child(row().gap(6.0).center_y().child(comum::rotulo("por página", t)).child(seg("seg-pp", pp, t)));
+    }
+    let tem_filtro = !s.filtro.anos.is_empty() || !s.filtro.pilares.is_empty() || !s.filtro.tipo.is_empty()
+        || s.filtro.so_sem_projeto || s.filtro.status != Status::Todos;
+    if tem_filtro {
+        controles = controles.child(botao("limpar", "limpar filtros", t.dim, false, t, |s: &mut App| s.limpar_filtros()));
+    }
+
+    let mut grupos = row().w_full().gap(6.0).center_y().flex_wrap();
+    if s.aba != Aba::Cortes {
+        let mut anos: Vec<&str> = s.posts.iter().map(|p| p.ano.as_str()).collect();
+        anos.sort_unstable();
+        anos.dedup();
+        grupos = grupos.child(comum::rotulo("ano", t).pr(2.0));
+        for a in anos.into_iter().rev() {
+            let on = s.filtro.anos.contains(a);
+            let a2 = a.to_string();
+            grupos = grupos.child(pastilha(format!("ano-{a}"), a.to_string(), on, t, move |s: &mut App| s.alternar_ano(&a2)));
+        }
+        grupos = grupos.child(el().w(1.0).h(18.0).mx(6.0).fill(t.linha_forte));
+    }
+    let cont = if s.aba == Aba::Cortes {
+        filtro::contagem(s.cortes.iter().map(|c| c.pilar.as_str()))
+    } else {
+        filtro::contagem(s.posts.iter().map(|p| p.pilar.as_str()))
+    };
+    grupos = grupos.child(comum::rotulo("pilar", t).pr(2.0));
+    for (p, n) in cont {
+        let on = s.filtro.pilares.contains(&p);
+        let p2 = p.clone();
+        grupos = grupos.child(pastilha(format!("pilar-{p}"), format!("{p} {n}"), on, t, move |s: &mut App| s.alternar_pilar(&p2)));
+    }
+
+    col().key("filtros").w_full().gap(10.0).px(22.0).py(10.0).fill(t.bg).border_sides([0.0, 0.0, 1.0, 0.0], t.linha)
+        .child(controles)
+        .child(grupos)
 }
 
 fn rodape(s: &App, t: Tema) -> El {
@@ -256,9 +271,10 @@ fn rodape(s: &App, t: Tema) -> El {
         }
         r = r.child(botao("limpar-sel", "limpar seleção", t.dim, false, t, |s: &mut App| { s.selecao.clear(); s.versao += 1; }));
     }
-    r = r.child(spacer());
     if !s.aba.sem_lista() && !s.visiveis.is_empty() {
         r = r.child(paginador(s, t)).child(spacer());
+    } else {
+        r = r.child(spacer());
     }
     let rot_tarefas = if rodando > 0 { format!("tarefas · {rodando} rodando") } else { format!("tarefas {}", s.tarefas.len()) };
     r = r.child(botao("ver-tarefas", rot_tarefas, if rodando > 0 { t.alerta } else { t.dim }, s.tarefas_abertas, t,
@@ -295,12 +311,7 @@ fn paginador(s: &App, t: Tema) -> El {
         r = r.child(botao_tx("pag-prox", "›", t.txt, false, t, move |s: &mut App, tx| s.ir_pagina(atual + 1, tx)));
     }
     let faixa = filtro::pagina(s.visiveis.len(), s.pagina, s.por_pagina);
-    r = r.child(text(format!("{}–{} de {}", faixa.start + 1, faixa.end, s.visiveis.len())).font(tema::PEQ).color(t.dim).px(6.0));
-    for pp in POR_PAGINA {
-        let rot = if pp == 0 { "todos".to_string() } else { pp.to_string() };
-        r = r.child(pastilha(format!("pp-{pp}"), rot, s.por_pagina == pp, t, move |s: &mut App| s.por_pagina(pp)));
-    }
-    r
+    r.child(text(format!("{}–{} de {}", faixa.start + 1, faixa.end, s.visiveis.len())).font(tema::PEQ).color(t.dim).px(6.0))
 }
 
 /// No fim da grade: selecionar a página inteira e ir para a próxima.
