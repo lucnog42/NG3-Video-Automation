@@ -1,6 +1,6 @@
 //! Aba "recomendados": ranking pelo score do plano.py, com a decomposição de cada nota.
 
-use super::comum::{barra, botao, etiqueta, imagem, miniatura};
+use super::comum::{barra, botao, etiqueta, miniatura};
 use super::tema::{self, Tema};
 use crate::app::{Alvo, App, pilar_cor};
 use crate::dados::data_br;
@@ -33,7 +33,7 @@ fn linha(s: &App, i: usize, t: Tema) -> El {
         row().key(format!("r-{}", p.nome)).w_full().max_w(1100.0).h(92.0).gap(12.0).padding(8.0).center_y().radius(10.0)
             .fill(t.card).border(1.0, if sel { t.acento } else { t.linha }).cursor(Cursor::Pointer)
             .hover(t.linha_forte.alpha(0.08))
-            .child(el().size(74.0, 74.0).radius(7.0).clip_rounded(7.0).child(imagem(miniatura(s, capa.as_deref()), "", t)))
+            .child(el().size(74.0, 74.0).child(super::comum::imagem_r(miniatura(s, capa.as_deref()), "", t, [7.0; 4])))
             .child(col().grow(1.0).min_w(0.0).gap(5.0)
                 .child(row().gap(8.0).center_y()
                     .child(text(format!("{}.", posicao + 1)).font(tema::PEQ_M).color(t.dim))

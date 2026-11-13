@@ -1,7 +1,7 @@
 //! Aba "roteiros": a IA propõe vídeos novos montados com as falas que já existem; você aprova
 //! (vira projeto com o primeiro corte, só material do acervo) ou exclui.
 
-use super::comum::{botao, etiqueta, imagem, pastilha};
+use super::comum::{botao, etiqueta, pastilha};
 use super::tema::{self, Tema};
 use crate::app::App;
 use crate::dados::Parte;
@@ -191,8 +191,8 @@ fn parte(s: &App, i: usize, n: usize, p: &Parte, aprovado: bool, t: Tema, k: &ru
         let quando = if cand.tipo == "video" && cand.fim > 0.0 { format!(" {:.0}–{:.0}s", cand.ini, cand.fim) } else { String::new() };
         let mut cartao = col().key(format!("p-{i}-c-{}", cand.id)).w(104.0).gap(3.0).padding(4.0).radius(6.0)
             .fill(if on { t.acento.alpha(0.15) } else { t.card2 }).border(1.0, if on { t.acento } else { t.linha })
-            .child(el().w(96.0).h(96.0).radius(4.0).clip_rounded(4.0).fill(t.card)
-                .child(imagem(s.miniaturas.get(&cand.miniatura), &cand.tipo, t)))
+            .child(el().w(96.0).h(96.0).radius(4.0).fill(t.card)
+                .child(super::comum::imagem_r(s.miniaturas.get(&cand.miniatura), &cand.tipo, t, [4.0; 4])))
             .child(text(format!("{} · {}{quando}", cand.fonte, cand.tipo)).font(tema::MINI).color(t.rep).truncate());
         if !aprovado {
             cartao = cartao.cursor(Cursor::Pointer).hover(t.linha_forte.alpha(0.2))

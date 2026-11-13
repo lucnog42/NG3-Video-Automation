@@ -1,6 +1,6 @@
 //! O preview de um post ou corte: mídias, tira de quadros do vídeo, legenda, fala, ações.
 
-use super::comum::{botao, etiqueta, imagem, texto_bloco};
+use super::comum::{botao, etiqueta, texto_bloco};
 use super::tema::{self, Tema};
 use crate::app::{Alvo, App};
 use crate::dados::{data_br, duracao};
@@ -74,11 +74,12 @@ fn corpo_post(s: &App, nome: &str, t: Tema, tira_w: Option<f32>) -> Option<El> {
     if !imgs.is_empty() {
         let mut mosaico = row().w_full().gap(8.0).flex_wrap();
         for (i, m) in imgs.iter().enumerate() {
-            mosaico = mosaico.child(col().key(format!("img-{i}")).w(240.0).radius(9.0).clip_rounded(9.0)
+            mosaico = mosaico.child(col().key(format!("img-{i}")).w(240.0).radius(9.0)
                 .fill(t.card2).border(1.0, t.linha)
                 // enquanto a versão de 720 px não chega, mostra a miniatura da grade (se já houver)
-                .child(el().w(240.0).h(240.0).child(imagem(
-                    s.originais.get(*m).filter(|i| i.is_ready()).or_else(|| s.miniaturas.get(*m)), "carregando", t)))
+                .child(el().w(240.0).h(240.0).child(super::comum::imagem_r(
+                    s.originais.get(*m).filter(|i| i.is_ready()).or_else(|| s.miniaturas.get(*m)), "carregando", t,
+                    [9.0, 9.0, 0.0, 0.0])))
                 .child(text(m.rsplit('/').next().unwrap_or(m).to_string()).font(tema::PEQ).color(t.dim).padding(6.0)));
         }
         c = c.child(mosaico);
@@ -208,8 +209,8 @@ fn painel_video(s: &App, videos: Vec<String>, t: Tema, tira_w: Option<f32>) -> E
         c = c.child(abas);
     }
     let quadro = match grande {
-        Some(im) if im.is_ready() => el().w_full().h(420.0).radius(9.0).clip_rounded(9.0).fill(rune::Color::BLACK)
-            .pixels_fit(im.pixels(), SurfaceFit::Fit),
+        Some(im) if im.is_ready() => el().w_full().h(420.0).radius(9.0).fill(rune::Color::BLACK)
+            .child(el().w_full().h_full().radius(9.0).pixels_fit(im.pixels(), SurfaceFit::Fit)),
         _ => el().w_full().h(420.0).radius(9.0).fill(t.card2).center()
             .child(text("carregando quadro…").font(tema::PEQ).color(t.dim)),
     };
@@ -236,23 +237,7 @@ fn painel_video(s: &App, videos: Vec<String>, t: Tema, tira_w: Option<f32>) -> E
         c = c.child(faixa);
     }
     if let Some((tr, im)) = tira {
-        let mut fita = row().key("tira").w_full().h(64.0).gap(2.0).clip_rounded(4.0);
-        let gap = 2.0;
-        let cel_w = tira_w.map(|w| (w - gap * (tr.n as f32 - 1.0)) / tr.n as f32);
-        for i in 0..tr.n {
-            let on = i == q;
-            let mut cel = el().key(format!("q{i}")).grow(1.0).h_full().radius(4.0).clip_rounded(4.0)
-                .opacity(if on { 1.0 } else { 0.5 }).hover(rune::Color::WHITE.alpha(0.15)).cursor(Cursor::Pointer)
-                .on_press(move |s: &mut App| s.escolher_quadro(i));
-            if let (true, Some(cw)) = (im.is_ready(), cel_w) {
-                // recorta o quadro i da tira: a imagem inteira deslocada dentro da célula
-                cel = cel.child(el().w(cw * tr.n as f32).h(64.0).absolute(-cw * i as f32, 0.0)
-                    .pixels(im.pixels()));
-            } else {
-                cel = cel.fill(t.card2);
-            }
-            fita = fita.child(cel);
-        }
+        let fita = super::comum::fita("tira", im, tr.n, q, 64.0, t, |s: &mut App, i| s.escolher_quadro(i));
         c = c.child(fita);
     }
     let mut rodape = row().w_full().gap(8.0).center_y()
@@ -363,8 +348,8 @@ fn painel_motion(s: &App, t: Tema) -> El {
         for r in &e.referencias {
             let r2 = r.clone();
             fotos = fotos.child(col().key(format!("ref-{r}")).w(110.0).gap(4.0)
-                .child(el().w(110.0).h(110.0).radius(6.0).clip_rounded(6.0).fill(t.card)
-                    .child(super::comum::imagem(s.miniaturas.get(r), "…", t)))
+                .child(el().w(110.0).h(110.0).radius(6.0).fill(t.card)
+                    .child(super::comum::imagem_r(s.miniaturas.get(r), "…", t, [6.0; 4])))
                 .child(row().w_full().gap(4.0).center_y()
                     .child(text(r.rsplit('/').next().unwrap_or(r).to_string()).font(tema::MINI).color(t.dim).truncate().grow(1.0).min_w(0.0))
                     .child(botao(format!("tirar-{r}"), "×", t.erro, false, t, move |s: &mut App| s.motion_tirar(&r2)))));
@@ -465,8 +450,8 @@ fn refs_do_momento(s: &App, mo: &crate::dados::Momento, gerais: &[String], t: Te
     for r in &mo.referencias {
         let (id, r2) = (mo.id.clone(), r.clone());
         fotos = fotos.child(col().key(format!("mref-{}-{r}", mo.id)).w(72.0).gap(2.0)
-            .child(el().w(72.0).h(72.0).radius(5.0).clip_rounded(5.0).fill(t.card2)
-                .child(super::comum::imagem(s.miniaturas.get(r), "…", t))
+            .child(el().w(72.0).h(72.0).radius(5.0).fill(t.card2)
+                .child(super::comum::imagem_r(s.miniaturas.get(r), "…", t, [5.0; 4]))
                 .child(row().absolute(48.0, 2.0)
                     .child(botao(format!("mtirar-{}-{r}", mo.id), "×", t.erro, false, t,
                                  move |s: &mut App| s.motion_ref(&id, "tirar", serde_json::json!({"arquivo": r2}))))))
@@ -650,8 +635,8 @@ fn broll_acervo(s: &App, m: &crate::app::MotionUi, mo: &crate::dados::Momento, t
                 .fill(if ordem.is_some() { t.acento.alpha(0.15) } else { t.card2 })
                 .border(1.0, if ordem.is_some() { t.acento } else { t.linha })
                 .cursor(Cursor::Pointer).hover(t.linha_forte.alpha(0.2))
-                .child(el().w(104.0).h(104.0).radius(4.0).clip_rounded(4.0).fill(t.card)
-                    .child(super::comum::imagem(s.miniaturas.get(&cand.miniatura), &cand.tipo, t))
+                .child(el().w(104.0).h(104.0).radius(4.0).fill(t.card)
+                    .child(super::comum::imagem_r(s.miniaturas.get(&cand.miniatura), &cand.tipo, t, [4.0; 4]))
                     .child(match ordem { Some(i) => row().absolute(4.0, 4.0).child(etiqueta(format!("{}", i + 1), t.acento)), None => el() }))
                 .child(text(format!("{} · {}{quando}", cand.fonte, cand.tipo)).font(tema::MINI).color(t.rep).truncate())
                 .child(text(cand.texto.clone()).font(tema::MINI).color(t.dim).truncate())

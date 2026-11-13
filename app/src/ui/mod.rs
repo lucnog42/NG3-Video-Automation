@@ -152,7 +152,7 @@ fn item_nav(s: &App, t: Tema, aba: Option<Aba>, rotulo: &str, n: usize) -> El {
     let mut r = row().key(format!("nav-{rotulo}")).w_full().h(32.0).px(10.0).gap(6.0).center_y().radius(6.0)
         .fill(if on { t.acento.alpha(0.14) } else { rune::Color::TRANSPARENT })
         .child(text(rotulo.to_string()).font(if on { tema::NORMAL_M } else { tema::NORMAL })
-            .color(if on { t.acento } else { t.dim }))
+            .color(if on { t.acento } else if aba.is_none() { t.fraco } else { t.dim }))
         .child(spacer());
     match aba {
         Some(a) => {
@@ -162,7 +162,7 @@ fn item_nav(s: &App, t: Tema, aba: Option<Aba>, rotulo: &str, n: usize) -> El {
             }
             r.hover(t.card2).cursor(Cursor::Pointer).on_press(move |s: &mut App| s.trocar_aba(a))
         }
-        None => r.opacity(0.45).child(text("em breve").font(tema::PEQ).color(t.fraco)),
+        None => r.child(text("em breve").font(tema::PEQ).color(t.fraco.alpha(0.6))),
     }
 }
 

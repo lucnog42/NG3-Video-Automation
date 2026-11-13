@@ -110,8 +110,7 @@ fn linha_video(s: &App, m: &Midia, aberto: bool, sel: bool, t: Tema) -> El {
         .hover(t.card2).cursor(Cursor::Pointer)
         .on_press(move |s: &mut App| s.cortes_abrir(m2.clone()))
         .child(caixa)
-        .child(el().size(64.0, 36.0).radius(4.0).clip_rounded(4.0)
-            .child(comum::imagem(comum::miniatura(s, Some(&m.caminho)), "", t)))
+        .child(el().size(64.0, 36.0).child(comum::imagem_r(comum::miniatura(s, Some(&m.caminho)), "", t, [4.0; 4])))
         .child(col().grow(1.0).min_w(0.0).gap(2.0)
             .child(text(m.nome.clone()).font(if aberto { tema::PEQ_M } else { tema::PEQ }).color(if aberto { t.acento } else { t.txt })
                 .truncate().w_full())
@@ -150,8 +149,8 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
     let grande = pronto(q).or_else(|| (1..8).find_map(|d| pronto(q.saturating_sub(d)).or_else(|| pronto(q + d))))
         .or_else(|| s.miniaturas.get(&m.caminho));
     let quadro = match grande {
-        Some(im) if im.is_ready() => el().w_full().h(340.0).radius(9.0).clip_rounded(9.0).fill(Color::BLACK)
-            .pixels_fit(im.pixels(), SurfaceFit::Fit),
+        Some(im) if im.is_ready() => el().w_full().h(340.0).radius(9.0).fill(Color::BLACK)
+            .child(el().w_full().h_full().radius(9.0).pixels_fit(im.pixels(), SurfaceFit::Fit)),
         _ => el().w_full().h(340.0).radius(9.0).fill(t.card2).center().child(text("carregando quadros…").font(tema::PEQ).color(t.dim)),
     };
     let n = c.tira.as_ref().map_or(0, |(tr, _)| tr.n);
@@ -177,22 +176,7 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
 
     let mut col_ = base.child(cab).child(tags_video).child(quadro).child(transporte);
     if let Some((tr, im)) = c.tira.as_ref() {
-        // tira: o quadro i é a imagem inteira deslocada dentro da célula
-        let gap = 1.0;
-        let cel_w = largura.map(|w| (w - gap * (tr.n as f32 - 1.0)) / tr.n as f32);
-        let mut fita = row().key("tira-cortes").w_full().h(46.0).gap(gap).clip_rounded(4.0);
-        for i in 0..tr.n {
-            let on = i == q;
-            let mut cel = el().key(format!("cq{i}")).grow(1.0).h_full().clip_rounded(2.0)
-                .opacity(if on { 1.0 } else { 0.55 }).hover(Color::WHITE.alpha(0.15)).cursor(Cursor::Pointer)
-                .on_press(move |s: &mut App| s.cortes_quadro(i));
-            if let (true, Some(cw)) = (im.is_ready(), cel_w) {
-                cel = cel.child(el().w(cw * tr.n as f32).h(46.0).absolute(-cw * i as f32, 0.0).pixels(im.pixels()));
-            } else {
-                cel = cel.fill(t.card2);
-            }
-            fita = fita.child(cel);
-        }
+        let fita = comum::fita("tira-cortes", im, tr.n, q, 46.0, t, |s: &mut App, i| s.cortes_quadro(i));
         col_ = col_.child(comum::rotulo("tira de quadros", t)).child(fita);
         if let Some(w) = largura {
             col_ = col_.child(linha_do_tempo(s, w, t));
@@ -223,7 +207,7 @@ fn linha_do_tempo(s: &App, w: f32, t: Tema) -> El {
         let faixa = match ct.origem.as_str() { "fala" => 0.0, "cena" => 1.0, _ => 2.0 };
         let largura = (x(ct.fim) - x(ct.ini)).max(4.0);
         l = l.child(row().key(format!("lc-{id}")).absolute(x(ct.ini), GAP + faixa * (FAIXA + GAP)).w(largura).h(FAIXA)
-            .radius(4.0).px(4.0).center_y().clip_rounded(4.0)
+            .radius(4.0).px(4.0).center_y()
             .fill(cor.alpha(if ct.proposto { 0.16 } else { 0.42 }))
             .border(if sel { 2.0 } else { 1.0 }, if sel { t.txt } else { cor.alpha(if ct.proposto { 0.55 } else { 1.0 }) })
             .cursor(Cursor::Pointer).on_press(move |s: &mut App| s.cortes_selecionar(id))

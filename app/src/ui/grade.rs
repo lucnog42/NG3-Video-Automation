@@ -1,6 +1,6 @@
 //! A grade de cards (posts e cortes), virtualizada: só as linhas na tela existem.
 
-use super::comum::{botao, etiqueta, imagem, miniatura};
+use super::comum::{botao, etiqueta, miniatura};
 use super::tema::{self, Tema};
 use crate::app::{Alvo, App, pilar_cor};
 use crate::dados::data_br;
@@ -55,8 +55,8 @@ fn card_post(s: &App, j: usize, w: f32, h: f32, t: Tema) -> El {
     let nome = p.nome.clone();
     memo(format!("card-{}", p.nome), versao, || {
         let thumb_txt = if p.n_video > 0 { "▶ vídeo" } else { "imagem" };
-        let mut thumb = el().key("thumb").w_full().h(h).clip_rounded(0.0).fill(t.card2)
-            .child(imagem(miniatura(s, capa.as_deref()), thumb_txt, t));
+        let mut thumb = el().key("thumb").w_full().h(h).corners([11.0, 11.0, 0.0, 0.0]).fill(t.card2)
+            .child(super::comum::imagem_r(miniatura(s, capa.as_deref()), thumb_txt, t, [11.0, 11.0, 0.0, 0.0]));
         // selos sobre a imagem
         let mut topo = row().w_full().gap(6.0).padding(7.0).absolute(0.0, 0.0);
         topo = topo.child(etiqueta(if p.projeto { if compacto { "✓" } else { "PROJETO ✓" } } else { p.tipo.as_str() },
@@ -91,12 +91,13 @@ fn card_post(s: &App, j: usize, w: f32, h: f32, t: Tema) -> El {
         }
         let info = info.child(marcas);
         let abrir = nome.clone();
-        col().key(format!("post-{}", p.nome)).w(w).min_w(0.0).radius(11.0).clip_rounded(11.0)
+        col().key(format!("post-{}", p.nome)).w(w).min_w(0.0).radius(11.0)
             .fill(t.card).border(if sel { 2.0 } else { 1.0 }, if sel { t.acento } else if rp { t.rep.alpha(0.5) } else { t.linha })
-            .opacity(if ni { 0.45 } else { 1.0 })
             .hover(t.linha_forte.alpha(0.08))
             .cursor(Cursor::Pointer)
             .child(thumb).child(info)
+            // NI esmaecido por um véu, não por opacity (ver comum::imagem_r)
+            .child(if ni { super::comum::veu(t.bg.alpha(0.55), 11.0) } else { el() })
             .on_press(move |s: &mut App| s.abrir_preview(Alvo::Post(abrir.clone())))
     })
 }

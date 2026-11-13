@@ -318,8 +318,8 @@ fn card(s: &App, v: Vista, m: &Midia, t: Tema) -> El {
         .border(1.5, if sel { t.acento } else { Color::WHITE.alpha(0.7) })
         .child(if sel { text("✓").font(tema::MINI).color(tema::tinta_acento()) } else { el() });
     let tipo = if m.tipo == "video" { "vídeo" } else { "foto" };
-    let capa = el().w_full().h(THUMB_H).radius(6.0).clip_rounded(6.0).fill(t.card2)
-        .child(comum::imagem(comum::miniatura(s, Some(&m.caminho)), tipo, t))
+    let capa = el().w_full().h(THUMB_H).radius(6.0).fill(t.card2)
+        .child(comum::imagem_r(comum::miniatura(s, Some(&m.caminho)), tipo, t, [6.0; 4]))
         .child(marca.absolute(8.0, 8.0))
         .child(if m.tipo == "video" {
             row().absolute(8.0, THUMB_H - 26.0).child(if m.transcrito { etiqueta("transcrito", t.ok) }
@@ -409,7 +409,7 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
                 .on_submit(move |s: &mut App, _| s.midia_tag_digitada(v))
                 .build(k).key(format!("nova-tag-{v:?}")).w_full());
         if !digitado.is_empty() {
-            let mut lista = col().w_full().radius(6.0).fill(t.card2).border(1.0, t.linha_forte).clip_rounded(6.0);
+            let mut lista = col().w_full().radius(6.0).fill(t.card2).border(1.0, t.linha_forte);
             let achadas: Vec<_> = b.tags.todas().into_iter()
                 .filter(|(sl, nm, _)| sl.contains(&digitado) || nm.to_lowercase().contains(&digitado)).take(5).collect();
             for (sl, nm, origem) in &achadas {
