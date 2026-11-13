@@ -69,6 +69,10 @@ create table if not exists midia_meta (midia_id integer not null, chave text not
 create table if not exists midia_sugestao (midia_id integer not null, tag_id integer not null, score real,
     estado text not null default 'pendente', modelo text default '', criado_em real,
     primary key (midia_id, tag_id));
+create table if not exists corte_sugestao (corte_id integer not null, tag_id integer not null, score real,
+    estado text not null default 'pendente', modelo text default '', criado_em real,
+    primary key (corte_id, tag_id));
+create table if not exists midia_emb (midia_id integer primary key, modelo text, emb blob);
 create table if not exists midia_tag (
     midia_id integer not null, tag_id integer not null, por text not null,
     primary key (midia_id, tag_id));

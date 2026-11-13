@@ -1322,7 +1322,7 @@ impl App {
             }
             if dono == "inserir-motion" { self.motion_recarregar(); }
             if dono == "transcrever" || dono == "reconhecer" { self.transcricao_terminou(); self.tags_recarregar(); }
-            if dono == "cortes-cena" { self.x.c.propondo = false; self.cortes_contar();
+            if dono == "cortes-cena" || dono == "cortes-ia" { self.x.c.propondo = false; self.cortes_contar();
                 if let Some(id) = self.x.c.video.as_ref().map(|m| m.id) { self.cortes_recarregar(id); } }
             if dono == "video-ia" && !ok { self.motion_recarregar(); }
             if v.get("recarregar").is_some() {

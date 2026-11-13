@@ -41,6 +41,9 @@ pub struct Corte {
     pub texto: String,
     #[serde(default)]
     pub tags: Vec<TagCorte>,
+    /// sugestões da IA de imagem para este corte, pendentes
+    #[serde(default)]
+    pub sugestoes: Vec<crate::dados::SugestaoIa>,
 }
 
 impl Corte {
@@ -287,6 +290,24 @@ impl App {
         if self.x.player.video.as_deref() == Some(v) { self.x.player.tempo().unwrap_or(0.0) } else { self.x.c.tempo() }
     }
 
+    /// Tarefa: a IA sugere tags (lugar, momento, plano medido) para cada corte do vídeo aberto
+    /// ou, em "Selecionados", dos vídeos selecionados.
+    pub fn cortes_reconhecer(&mut self) {
+        let ids: Vec<i64> = if self.x.c.ver_selecionados { self.x.b.cortes.selecao.iter().copied().collect() }
+            else { self.x.c.video.as_ref().map(|m| m.id).into_iter().collect() };
+        if ids.is_empty() { self.aviso = Some("abra ou selecione um vídeo".into()); return; }
+        self.pedir(Pedido::CortePropor("ia".into()), "corte_reconhecer", json!({"midias": ids}));
+    }
+
+    /// Aceita ou recusa sugestões do corte escolhido (ou, sem `id`, de todos os cortes à vista).
+    pub fn corte_sugestao(&mut self, id: Option<i64>, aceitar: bool, tag: Option<&str>) {
+        let lista = if self.x.c.ver_selecionados { &self.x.c.dos_selecionados } else { &self.x.c.cortes };
+        let ids: Vec<i64> = match id { Some(i) => vec![i], None => lista.iter().filter(|c| !c.sugestoes.is_empty()).map(|c| c.id).collect() };
+        if ids.is_empty() { return; }
+        let tags: Vec<&str> = tag.into_iter().collect();
+        self.corte_acao("corte_sugestao", json!({"ids": ids, "aceitar": aceitar, "tags": tags}));
+    }
+
     /// Espaço / ▶: toca no próprio painel o corte escolhido (ou do cursor em diante); de novo, pausa
     /// onde está e leva a tira até ali.
     pub fn cortes_tocar(&mut self) {
@@ -395,8 +416,10 @@ impl App {
                 self.x.c.propondo = false;
                 if let Some(cmd) = r["cmd"].as_array() {
                     let cmd: Vec<String> = cmd.iter().filter_map(|x| x.as_str().map(String::from)).collect();
-                    self.rodar_processo("cortes-cena", cmd);
-                    self.aviso = Some("procurando as mudanças de cena (veja as tarefas)".into());
+                    let ia = origem == "ia";
+                    self.rodar_processo(if ia { "cortes-ia" } else { "cortes-cena" }, cmd);
+                    self.aviso = Some(if ia { "a IA está olhando cada corte (veja as tarefas)".into() }
+                                      else { "procurando as mudanças de cena (veja as tarefas)".into() });
                 } else {
                     let n = r["propostos"].as_u64().unwrap_or(0);
                     let sem = r["sem_transcricao"].as_u64().unwrap_or(0);

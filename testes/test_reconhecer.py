@@ -89,8 +89,8 @@ class Reconhecer(unittest.TestCase):
             def __init__(self, *a, **k):
                 pass
 
-            def logits(self, imgs):            # a IA "acha" que é estádio e jogo
-                return [3.0 if r["slug"] in ("estadio", "jogo") else -4.0 for r in reconhecer.rotulos(self.c)]
+            def analisar(self, imgs):          # a IA "acha" que é estádio e jogo
+                return [3.0 if r["slug"] in ("estadio", "jogo") else -4.0 for r in reconhecer.rotulos(self.c)], [1.0, 0.0]
         Falso.c = {"categorias": ["lugar", "momento", "plano"]}
         c = {**Falso.c, "modelo": "falso", "quadros_por_video": 1}
         with mock.patch.object(reconhecer, "cfg", return_value=c), \
@@ -103,6 +103,63 @@ class Reconhecer(unittest.TestCase):
         item = biblioteca.listar({}, db=self.db)["itens"][0]
         self.assertEqual([(t["slug"], t["por"]) for t in item["tags"]], [("praia", "metadados")])
         self.assertEqual([s["slug"] for s in item["sugestoes"]], ["jogo"])        # estádio não: o GPS manda
+
+    def test_plano_medido_por_rosto_e_drone(self):
+        self.assertEqual(reconhecer.plano_medido([0.0, 0.31, 0.4], {}), ("fechado", 0.9))
+        self.assertEqual(reconhecer.plano_medido([0.18, 0.0, 0.2], {}), ("medio", 0.85))
+        self.assertEqual(reconhecer.plano_medido([0.1], {}), ("aberto", 0.75))
+        self.assertIsNone(reconhecer.plano_medido([0.0, 0.0], {}))                     # sem rosto: fica com a IA
+        self.assertEqual(reconhecer.plano_medido([0.4], {"camera": "DJI FC3170"}), ("drone", 1.0))
+
+    def test_fronteiras_do_plano_vem_dos_exemplos(self):
+        con = reconhecer.abrir(self.db)
+        for k, (plano, rosto) in enumerate([("fechado", 0.40)] * 3 + [("medio", 0.12)] * 3 + [("aberto", 0.04)] * 3):
+            mid = con.execute("insert into midia (fonte_id, caminho, tipo, status_import) values ('f', ?, 'video', 'novo')",
+                              (f"/x/p{k}.mp4",)).lastrowid
+            con.execute("insert into midia_meta (midia_id, chave, valor) values (?, 'rosto', ?)", (mid, str(rosto)))
+            biblioteca._marcar(con, mid, biblioteca._garantir_tag(con, plano), "humano")
+        lim = reconhecer.limiares_aprendidos(con)
+        con.close()
+        self.assertEqual(lim, {"fechado": 0.26, "medio": 0.08})
+        # com essas fronteiras, um rosto de 9% (que o padrão chamaria de aberto) vira médio
+        self.assertEqual(reconhecer.plano_medido([0.09], {}), ("aberto", 0.75))
+        self.assertEqual(reconhecer.plano_medido([0.09], {}, lim), ("medio", 0.85))
+
+    def test_aprende_com_os_exemplos_da_pessoa(self):
+        rs = reconhecer.rotulos({"categorias": ["plano"]})
+        con = reconhecer.abrir(self.db)
+        ids = []
+        for k in range(12):                     # 6 "aberto" perto de [1, 0], 6 "fechado" perto de [0, 1]
+            mid = con.execute("insert into midia (fonte_id, caminho, tipo, status_import) values ('f', ?, 'imagem', 'novo')",
+                              (f"/x/{k}.jpg",)).lastrowid
+            emb = [1.0, 0.1] if k < 6 else [0.1, 1.0]
+            reconhecer.gravar_impressao(con, mid, emb, "m")
+            biblioteca._marcar(con, mid, biblioteca._garantir_tag(con, "aberto" if k < 6 else "fechado"), "humano")
+            ids.append(mid)
+        protos = reconhecer.prototipos(con, rs, "m", minimo=5)
+        con.close()
+        self.assertEqual(sorted(protos), ["aberto", "fechado"])
+        # a IA genérica diz "aberto"; os exemplos dizem "fechado" com folga: os exemplos pesam o dobro
+        lg = {"aberto": -2.0, "fechado": -2.6}
+        out = dict(reconhecer.escolher_com_exemplos(lg, [0.05, 1.0], protos, rs, {"relativo_min": 0.55}))
+        self.assertIn("fechado", out)
+        self.assertNotIn("aberto", out)
+        # sem exemplos suficientes, vale só a IA
+        self.assertIn("aberto", dict(reconhecer.escolher_com_exemplos(lg, [0.05, 1.0], {}, rs, {"relativo_min": 0.55})))
+
+    def test_sugestao_de_corte_aceita_vira_tag_do_corte(self):
+        from acervo import cortes
+        cid = cortes.criar(self.mid, 0, 4, db=self.db)
+        con = reconhecer.abrir(self.db)
+        self.assertEqual(reconhecer.gravar_sugestoes_corte(con, cid, [("fechado", 0.9), ("jogo", 0.7)], "m"), 2)
+        con.commit()
+        con.close()
+        self.assertEqual([s["slug"] for s in cortes.listar([self.mid], db=self.db)[0]["sugestoes"]], ["fechado", "jogo"])
+        self.assertEqual(reconhecer.decidir_cortes([cid], True, ["fechado"], db=self.db), 1)
+        self.assertEqual(reconhecer.decidir_cortes([cid], False, db=self.db), 1)
+        c = cortes.listar([self.mid], db=self.db)[0]
+        self.assertEqual(([t["slug"] for t in c["tags"]], c["sugestoes"]), (["fechado"], []))
+        self.assertEqual(biblioteca.listar({}, db=self.db)["itens"][0]["tags"], [])   # o vídeo não ganha a tag do corte
 
     def test_metadados_gravados_aparecem_na_lista(self):
         con = reconhecer.abrir(self.db)

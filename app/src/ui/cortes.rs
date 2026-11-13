@@ -52,8 +52,9 @@ fn lista(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
             .child(botao("cortes-sel-tudo", if vm.total > 0 && n_sel >= vm.total { "tirar seleção" } else { "selecionar todos" },
                          t.txt, false, t, |s: &mut App| s.midia_selecionar_tudo(Vista::Cortes))))
         .child(busca)
-        .child(seg("seg-cortes-tr", vec![tr("sim", format!("Transcritos {}", n("sim"))), tr("nao", format!("Sem {}", n("nao"))),
-                                         tr("sem_fala", format!("Sem fala {}", n("sem_fala"))), tr("", "Todos".into())], t));
+        .child(seg("seg-cortes-tr", vec![tr("sim", format!("Com {}", n("sim"))), tr("nao", format!("Sem {}", n("nao"))),
+                                         tr("sem_fala", format!("Sem fala {}", n("sem_fala"))), tr("", "Todos".into())], t))
+        .child(text("transcrição: com · sem · sem fala").font(tema::PEQ).color(t.fraco));
 
     let aberto = s.x.c.video.as_ref().map(|m| m.id);
     let mut itens = col().key("cortes-vlist").w_full().grow(1.0).min_h(0.0).gap(2.0).padding(8.0)
@@ -240,7 +241,8 @@ fn lado(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(botao("propor-fala", if c.propondo { "propondo…" } else { "propor pela fala" }, t.acento, c.propondo, t,
                      |s: &mut App| s.cortes_propor("fala")))
         .child(botao("propor-cena", "propor por cena", t.ok, false, t, |s: &mut App| s.cortes_propor("cena")))
-        .child(botao("aceitar-todos", "aceitar todos propostos", t.txt, false, t, |s: &mut App| s.corte_aceitar(true)));
+        .child(botao("aceitar-todos", "aceitar todos propostos", t.txt, false, t, |s: &mut App| s.corte_aceitar(true)))
+        .child(botao("cortes-ia", "reconhecer cortes (IA)", t.rep, false, t, |s: &mut App| s.cortes_reconhecer()));
     if c.ver_selecionados {
         p = p.child(selecionados(s, t, k, propor));
         return p;
@@ -291,6 +293,21 @@ fn card_corte(s: &App, ct: &Corte, t: Tema, k: &rune_kit::Kit) -> El {
         card = card.child(text(txt).font(tema::PEQ.lh(16.0)).color(t.dim).wrap());
     }
     if !ct.tags.is_empty() { card = card.child(tags); }
+    if !ct.sugestoes.is_empty() {
+        let mut sg = row().w_full().gap(4.0).flex_wrap().center_y();
+        for x in &ct.sugestoes {
+            let (s1, s2) = (x.slug.clone(), x.slug.clone());
+            sg = sg.child(row().key(format!("csg-{id}-{}", x.slug)).h(22.0).center_y().radius(11.0)
+                .border(1.0, t.rep.alpha(0.6)).fill(t.rep.alpha(0.10))
+                .child(row().key(format!("csga-{id}-{}", x.slug)).h_full().pl(8.0).pr(4.0).center_y().cursor(Cursor::Pointer)
+                    .hover(t.rep.alpha(0.18)).child(text(format!("{} ✓", x.nome)).font(tema::PEQ).color(t.rep))
+                    .on_press(move |s: &mut App| s.corte_sugestao(Some(id), true, Some(&s1))))
+                .child(row().key(format!("csgr-{id}-{}", x.slug)).h_full().pl(3.0).pr(7.0).center_y().cursor(Cursor::Pointer)
+                    .hover(t.erro.alpha(0.18)).child(text("×").font(tema::PEQ_M).color(t.erro))
+                    .on_press(move |s: &mut App| s.corte_sugestao(Some(id), false, Some(&s2)))));
+        }
+        card = card.child(sg);
+    }
     if !sel {
         if !ct.nota.is_empty() { card = card.child(text(format!("nota: {}", ct.nota)).font(tema::PEQ).color(t.fraco).truncate()); }
         return card;

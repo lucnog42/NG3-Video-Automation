@@ -40,6 +40,10 @@ create table if not exists midia_meta (midia_id integer not null, chave text not
 create table if not exists midia_sugestao (midia_id integer not null, tag_id integer not null, score real,
     estado text not null default 'pendente', modelo text default '', criado_em real,
     primary key (midia_id, tag_id));
+create table if not exists corte_sugestao (corte_id integer not null, tag_id integer not null, score real,
+    estado text not null default 'pendente', modelo text default '', criado_em real,
+    primary key (corte_id, tag_id));
+create table if not exists midia_emb (midia_id integer primary key, modelo text, emb blob);
 """
 
 
@@ -87,6 +91,7 @@ def metadados_video(arq: str) -> dict:
     if rot not in (None, "", 0, "0"):
         out["rotacao"] = rot
     out["data"] = tags.get("creation_time") or tags.get("com.apple.quicktime.creationdate") or tags.get("date")
+    out["encoder"] = tags.get("encoder") or tags.get("handler_name")
     out["camera"] = " ".join(x for x in (tags.get("com.apple.quicktime.make") or tags.get("make") or tags.get("com.android.manufacturer"),
                                          tags.get("com.apple.quicktime.model") or tags.get("model") or tags.get("com.android.model")) if x)
     loc = tags.get("location") or tags.get("com.apple.quicktime.location.iso6709") or tags.get("location-eng")
@@ -225,8 +230,9 @@ class Modelo:
             e = getattr(e, "pooler_output", e)
             self.texto = e / e.norm(dim=-1, keepdim=True)
 
-    def logits(self, imagens) -> list[float]:
-        """Para cada tag, o maior logit entre as imagens (o melhor quadro do vídeo)."""
+    def analisar(self, imagens) -> tuple[list[float], list[float]]:
+        """(para cada tag o maior logit entre as imagens — o melhor quadro do vídeo —, e a
+        impressão média das imagens, normalizada, que serve para aprender com os exemplos)."""
         torch = self.torch
         with torch.no_grad():
             x = self.proc(images=imagens, return_tensors="pt")["pixel_values"].to(self.disp)
@@ -236,24 +242,162 @@ class Modelo:
             e = getattr(e, "pooler_output", e)
             e = e / e.norm(dim=-1, keepdim=True)
             logits = e @ self.texto.T * self.modelo.logit_scale.exp() + self.modelo.logit_bias
-            return logits.float().max(dim=0).values.tolist()
+            media = e.float().mean(dim=0)
+            media = media / media.norm()
+            return logits.float().max(dim=0).values.tolist(), media.tolist()
 
 
-def quadros(arq: str, tipo: str, n: int):
-    """Imagens para o modelo: a foto, ou n quadros espalhados pelo vídeo (sem os 5% das pontas)."""
+# ------------------------------------------------------------ plano medido
+class Rostos:
+    """O tamanho do maior rosto em relação à altura do quadro (YuNet do OpenCV). Só mede o
+    tamanho para saber o plano: não identifica quem é."""
+
+    def __init__(self, arquivo: str):
+        import cv2
+        self.cv2 = cv2
+        self.det = cv2.FaceDetectorYN.create(arquivo, "", (320, 320), 0.75, 0.3, 50)
+
+    def proporcoes(self, imagens) -> list[float]:
+        import numpy as np
+        out = []
+        for im in imagens:
+            a = self.cv2.cvtColor(np.asarray(im), self.cv2.COLOR_RGB2BGR)
+            h, w = a.shape[:2]
+            self.det.setInputSize((w, h))
+            _, faces = self.det.detect(a)
+            out.append(0.0 if faces is None else float(max(f[3] for f in faces)) / h)
+        return out
+
+
+def _e_drone(meta: dict) -> bool:
+    return any("dji" in str(meta.get(k, "")).lower() for k in ("camera", "encoder", "marca"))
+
+
+def rosto_mediano(rostos: list[float]) -> float:
+    com = sorted(p for p in rostos if p > 0)
+    return com[len(com) // 2] if com else 0.0
+
+
+def limiares_aprendidos(con, minimo: int = 3) -> dict:
+    """As fronteiras do plano tiradas dos exemplos da pessoa: o meio do caminho entre o rosto
+    mediano das mídias marcadas fechado/médio/aberto (à mão ou aceitando a IA)."""
+    por: dict[str, list[float]] = {}
+    for slug, v in con.execute(
+            "select t.slug, m.valor from midia_tag mt join tag t on t.id = mt.tag_id join midia_meta m "
+            "on m.midia_id = mt.midia_id and m.chave = 'rosto' where mt.por in ('humano', 'ia') "
+            "and t.slug in ('fechado', 'medio', 'aberto')"):
+        try:
+            if float(v) > 0:
+                por.setdefault(slug, []).append(float(v))
+        except ValueError:
+            pass
+    med = {k: sorted(v)[len(v) // 2] for k, v in por.items() if len(v) >= minimo}
+    out = {}
+    if "fechado" in med and "medio" in med and med["fechado"] > med["medio"]:
+        out["fechado"] = round((med["fechado"] + med["medio"]) / 2, 3)
+    if "medio" in med and "aberto" in med and med["medio"] > med["aberto"]:
+        out["medio"] = round((med["medio"] + med["aberto"]) / 2, 3)
+    return out
+
+
+def plano_medido(rostos: list[float], meta: dict, c: dict | None = None) -> tuple[str, float] | None:
+    """Drone pelos metadados (câmera DJI); senão, pelo rosto mediano dos quadros com rosto:
+    grande = fechado, médio = médio, pequeno = aberto. Sem rosto, não decide (fica com a IA)."""
+    c = {**{"fechado": 0.30, "medio": 0.14}, **(c or {})}
+    if _e_drone(meta):
+        return ("drone", 1.0)
+    com = sorted(p for p in rostos if p > 0)
+    if not com:
+        return None
+    p = com[len(com) // 2]
+    if p >= float(c["fechado"]):
+        return ("fechado", 0.9)
+    if p >= float(c["medio"]):
+        return ("medio", 0.85)
+    return ("aberto", 0.75)
+
+
+# ------------------------------------------------------------ aprender com os exemplos
+def gravar_impressao(con, midia_id: int, emb: list[float], modelo: str) -> None:
+    import array
+    con.execute("insert or replace into midia_emb (midia_id, modelo, emb) values (?, ?, ?)",
+                (midia_id, modelo, array.array("f", emb).tobytes()))
+
+
+def prototipos(con, rots: list[dict], modelo: str, minimo: int = 5) -> dict[str, list[float]]:
+    """A impressão média das mídias que a pessoa marcou com cada tag (à mão ou aceitando a IA),
+    para as tags com pelo menos `minimo` exemplos."""
+    import array
+    slugs = [r["slug"] for r in rots]
+    if not slugs:
+        return {}
+    soma: dict[str, list[float]] = {}
+    conta: dict[str, int] = {}
+    for slug, blob in con.execute(
+            f"select t.slug, e.emb from midia_tag mt join tag t on t.id = mt.tag_id join midia_emb e on e.midia_id = mt.midia_id "
+            f"where mt.por in ('humano', 'ia') and e.modelo = ? and t.slug in ({','.join('?' * len(slugs))})", [modelo, *slugs]):
+        v = array.array("f")
+        v.frombytes(blob)
+        if slug not in soma:
+            soma[slug] = [0.0] * len(v)
+        soma[slug] = [a + b for a, b in zip(soma[slug], v)]
+        conta[slug] = conta.get(slug, 0) + 1
+    out = {}
+    for slug, v in soma.items():
+        if conta[slug] >= minimo:
+            n = math.sqrt(sum(x * x for x in v)) or 1.0
+            out[slug] = [x / n for x in v]
+    return out
+
+
+def escolher_com_exemplos(logits: dict[str, float], emb: list[float] | None, protos: dict[str, list[float]],
+                          rots: list[dict], c: dict | None = None) -> list[tuple[str, float]]:
+    """Como `escolher`, mas numa categoria em que duas ou mais tags já têm exemplos da pessoa, a
+    semelhança com eles pesa o dobro da IA genérica (é o que ensina "plano médio" do jeito da marca)."""
+    if not emb or not protos:
+        return escolher(logits, rots, c)
+    escala = float((c or {}).get("escala_exemplos") or 30.0)
+    out = []
+    for cat in dict.fromkeys(r["categoria"] for r in rots):
+        da_cat = [r for r in rots if r["categoria"] == cat]
+        com = [r for r in da_cat if r["slug"] in protos]
+        if len(com) < 2:
+            out += escolher(logits, da_cat, c)
+            continue
+        sims = {r["slug"]: escala * sum(a * b for a, b in zip(emb, protos[r["slug"]])) for r in com}
+        topo_p = max(sims.values())
+        soma_p = sum(math.exp(v - topo_p) for v in sims.values())
+        topo_z = max(logits.get(r["slug"], -1e9) for r in da_cat)
+        soma_z = sum(math.exp(logits.get(r["slug"], -1e9) - topo_z) for r in da_cat)
+        mistura = {}
+        for r in da_cat:
+            rz = math.exp(logits.get(r["slug"], -1e9) - topo_z) / soma_z
+            rp = math.exp(sims[r["slug"]] - topo_p) / soma_p if r["slug"] in sims else 0.0
+            mistura[r["slug"]] = (rz + 2 * rp) / 3
+        # a mistura vira "logit" para a mesma regra de decisão (sem a exigência de evidência absoluta)
+        falsos = {k: math.log(max(v, 1e-9)) + 50.0 for k, v in mistura.items()}
+        out += escolher(falsos, da_cat, {**(c or {}), "evidencia_min": 0.0})
+    return out
+
+
+def quadros(arq: str, tipo: str, n: int, ini: float | None = None, fim: float | None = None):
+    """Imagens para o modelo: a foto, ou n quadros espalhados pelo vídeo (sem os 5% das pontas)
+    ou, com `ini`/`fim`, só dentro desse trecho (um corte)."""
     import io
     from PIL import Image
     if tipo == "imagem":
         with Image.open(arq) as im:
             return [im.convert("RGB").copy()]
-    try:
-        dur = float(json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
-                                               arq], capture_output=True, text=True, timeout=60).stdout)["format"]["duration"])
-    except (ValueError, KeyError, TypeError):
-        dur = 0.0
+    if ini is None or fim is None:
+        try:
+            dur = float(json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json",
+                                                   arq], capture_output=True, text=True, timeout=60).stdout)["format"]["duration"])
+        except (ValueError, KeyError, TypeError):
+            dur = 0.0
+        ini, fim = dur * 0.05, dur * 0.95
     out = []
     for k in range(max(1, n)):
-        t = dur * (0.05 + 0.9 * (k + 0.5) / max(1, n)) if dur else 0.0
+        t = ini + (fim - ini) * (k + 0.5) / max(1, n)
         r = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", arq, "-frames:v", "1",
                             "-vf", "scale=384:-2", "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True, timeout=120)
         if r.returncode == 0 and r.stdout:
@@ -261,23 +405,78 @@ def quadros(arq: str, tipo: str, n: int):
     return out
 
 
-def gravar_sugestoes(con, midia_id: int, sugestoes: list[tuple[str, float]], modelo: str) -> int:
-    """Pendentes novas; nada para tag que a mídia já tem ou que a pessoa já recusou."""
-    ja = {r[0] for r in con.execute("select t.slug from midia_tag mt join tag t on t.id = mt.tag_id where mt.midia_id = ?",
-                                    (midia_id,))}
-    con.execute("delete from midia_sugestao where midia_id = ? and estado = 'pendente'", (midia_id,))
+def _gravar_pendentes(con, tabela: str, chave: str, alvo_id: int, sugestoes: list[tuple[str, float]], modelo: str,
+                      ja: set[str]) -> int:
+    con.execute(f"delete from {tabela} where {chave} = ? and estado = 'pendente'", (alvo_id,))
     n = 0
     for slug, p in sugestoes:
         if slug in ja:
             continue
         tid = biblioteca._garantir_tag(con, slug)
-        r = con.execute("select estado from midia_sugestao where midia_id = ? and tag_id = ?", (midia_id, tid)).fetchone()
+        r = con.execute(f"select estado from {tabela} where {chave} = ? and tag_id = ?", (alvo_id, tid)).fetchone()
         if r and r[0] != "pendente":
             continue
-        con.execute("insert or replace into midia_sugestao (midia_id, tag_id, score, estado, modelo, criado_em) "
-                    "values (?, ?, ?, 'pendente', ?, ?)", (midia_id, tid, p, modelo, time.time()))
+        con.execute(f"insert or replace into {tabela} ({chave}, tag_id, score, estado, modelo, criado_em) "
+                    f"values (?, ?, ?, 'pendente', ?, ?)", (alvo_id, tid, p, modelo, time.time()))
         n += 1
     return n
+
+
+def gravar_sugestoes(con, midia_id: int, sugestoes: list[tuple[str, float]], modelo: str) -> int:
+    """Pendentes novas; nada para tag que a mídia já tem ou que a pessoa já recusou."""
+    ja = {r[0] for r in con.execute("select t.slug from midia_tag mt join tag t on t.id = mt.tag_id where mt.midia_id = ?",
+                                    (midia_id,))}
+    return _gravar_pendentes(con, "midia_sugestao", "midia_id", midia_id, sugestoes, modelo, ja)
+
+
+def gravar_sugestoes_corte(con, corte_id: int, sugestoes: list[tuple[str, float]], modelo: str) -> int:
+    ja = {r[0] for r in con.execute("select t.slug from corte_tag ct join tag t on t.id = ct.tag_id where ct.corte_id = ?",
+                                    (corte_id,))}
+    return _gravar_pendentes(con, "corte_sugestao", "corte_id", corte_id, sugestoes, modelo, ja)
+
+
+class Analise:
+    """O que se carrega uma vez por tarefa: o modelo, o detector de rosto e os exemplos da pessoa."""
+
+    def __init__(self, c: dict, rots: list[dict], db: str | None):
+        self.c, self.rots = c, rots
+        pasta = c.get("modelos_dir") or os.path.join(os.path.dirname(caminhos.venv("sep")), "hf")
+        self.modelo = Modelo(c.get("modelo"), [x["texto"] for x in rots], str(c.get("dispositivo") or "auto"), pasta)
+        print(f"  [modelo] {c.get('modelo')} em {self.modelo.disp}", flush=True)
+        arq_rosto = c.get("detector_rosto") or os.path.join(os.path.dirname(caminhos.venv("sep")), "modelos",
+                                                             "face_detection_yunet_2023mar.onnx")
+        self.rostos = None
+        try:
+            if os.path.exists(arq_rosto):
+                self.rostos = Rostos(arq_rosto)
+        except Exception as e:                  # pragma: no cover
+            print(f"  [plano] sem detector de rosto ({str(e)[:80]}): o plano fica só com a IA", flush=True)
+        con = abrir(db)
+        self.protos = prototipos(con, rots, c.get("modelo") or "", int(c.get("exemplos_minimos") or 5))
+        self.limiares = {**(c.get("plano") or {}), **limiares_aprendidos(con)}
+        con.close()
+        if self.protos:
+            print(f"  [exemplos] aprendendo com as suas tags: {', '.join(sorted(self.protos))}", flush=True)
+        if self.limiares != (c.get("plano") or {}):
+            print(f"  [plano] fronteiras tiradas dos seus exemplos: {self.limiares}", flush=True)
+        self.ultimo_rosto = 0.0
+
+    def tags(self, imgs, meta: dict, sem_lugar: bool = False) -> tuple[list[tuple[str, float]], list[float]]:
+        lg, emb = self.modelo.analisar(imgs)
+        lg = dict(zip((x["slug"] for x in self.rots), lg))
+        sug = escolher_com_exemplos(lg, emb, self.protos, self.rots, self.c)
+        de = lambda cat: {x["slug"] for x in self.rots if x["categoria"] == cat}  # noqa: E731
+        if sem_lugar:                           # o GPS já disse onde é: a IA não chuta outro lugar
+            sug = [x for x in sug if x[0] not in de("lugar")]
+        planos = de("plano")
+        self.ultimo_rosto = 0.0
+        if planos:
+            props = self.rostos.proporcoes(imgs) if self.rostos else []
+            self.ultimo_rosto = rosto_mediano(props)
+            medido = plano_medido(props, meta, self.limiares)
+            if medido and medido[0] in planos:  # o plano medido (rosto, drone) vale mais que o palpite
+                sug = [x for x in sug if x[0] not in planos] + [medido]
+        return sug, emb
 
 
 def reconhecer(ids: list[int], db: str | None = None, usar_ia: bool = True) -> list[dict]:
@@ -287,7 +486,7 @@ def reconhecer(ids: list[int], db: str | None = None, usar_ia: bool = True) -> l
                          f"({','.join('?' * len(ids))})", [int(i) for i in ids]).fetchall() if ids else []
     con.close()
     rots = rotulos(c)
-    modelo = None
+    analise = None
     out = []
     print(f"[0/{len(linhas)}] {len(rots)} tags da marca para comparar", flush=True)
     for k, (mid, caminho, tipo, nome) in enumerate(linhas, 1):
@@ -304,18 +503,16 @@ def reconhecer(ids: list[int], db: str | None = None, usar_ia: bool = True) -> l
             con.commit()
             con.close()
             if usar_ia and rots:
-                if modelo is None:
-                    pasta = c.get("modelos_dir") or os.path.join(os.path.dirname(caminhos.venv("sep")), "hf")
-                    modelo = Modelo(c.get("modelo"), [x["texto"] for x in rots], str(c.get("dispositivo") or "auto"), pasta)
-                    print(f"  [modelo] {c.get('modelo')} em {modelo.disp}", flush=True)
+                if analise is None:
+                    analise = Analise(c, rots, db)
                 imgs = quadros(arq, tipo, int(c.get("quadros_por_video") or 4))
                 if imgs:
-                    lg = dict(zip((x["slug"] for x in rots), modelo.logits(imgs)))
-                    sug = escolher(lg, rots, c)
-                    if r.get("gps"):          # o GPS já disse onde é: a IA não chuta outro lugar
-                        de_lugar = {x["slug"] for x in rots if x["categoria"] == "lugar"}
-                        sug = [x for x in sug if x[0] not in de_lugar]
+                    sug, emb = analise.tags(imgs, meta, sem_lugar=bool(r.get("gps")))
                     con = abrir(db)
+                    gravar_impressao(con, mid, emb, c.get("modelo") or "")
+                    if analise.ultimo_rosto:           # guardado para aprender as fronteiras do plano
+                        con.execute("insert or replace into midia_meta (midia_id, chave, valor) values (?, 'rosto', ?)",
+                                    (mid, f"{analise.ultimo_rosto:.3f}"))
                     r["sugeridas"] = gravar_sugestoes(con, mid, sug, c.get("modelo") or "")
                     con.commit()
                     con.close()
@@ -330,6 +527,56 @@ def reconhecer(ids: list[int], db: str | None = None, usar_ia: bool = True) -> l
             extra = f" · GPS: {', '.join(r['gps'])}" if r.get("gps") else ""
             melhores = ", ".join(f"{s} {p:.2f}" for s, p in r.get("melhores") or [])
             print(f"[{k}/{len(linhas)}] {nome}: {r.get('sugeridas', 0)} sugestão(ões){extra} ({melhores})", flush=True)
+    return out
+
+
+def reconhecer_cortes(midia_ids: list[int], db: str | None = None) -> list[dict]:
+    """Sugestões para cada corte (não descartado) dos vídeos: quadros só de dentro do corte, e o
+    plano medido corte a corte (num vídeo o plano muda; num corte, quase sempre não)."""
+    from acervo import cortes as C
+    c = cfg()
+    con = C.abrir(db)
+    vids = {r[0]: (r[1], r[2]) for r in con.execute(
+        f"select id, caminho, nome_exibicao from midia where tipo = 'video' and ausente = 0 and id in "
+        f"({','.join('?' * len(midia_ids))})", [int(i) for i in midia_ids])} if midia_ids else {}
+    con.close()
+    lista = [x for x in C.listar(list(vids), db=db)]
+    rots = rotulos(c)
+    analise = None
+    out = []
+    metas: dict[int, dict] = {}
+    print(f"[0/{len(lista)}] cortes de {len(vids)} vídeo(s)", flush=True)
+    for k, ct in enumerate(lista, 1):
+        caminho, nome = vids[ct["midia"]]
+        arq = _abs(caminho)
+        r: dict = {"corte": ct["id"]}
+        try:
+            if ct["midia"] not in metas:
+                metas[ct["midia"]] = metadados_video(arq)
+            meta = metas[ct["midia"]]
+            if analise is None:
+                analise = Analise(c, rots, db)
+            imgs = quadros(arq, "video", 3, ct["ini"], ct["fim"])
+            if imgs:
+                sug, _ = analise.tags(imgs, meta)
+                if "lat" in meta:               # o lugar pelo GPS também vale para o corte (como sugestão)
+                    perto = lugares_perto(float(meta["lat"]), float(meta["lon"]), raio_padrao=float(c.get("raio_gps_m") or 300))
+                    de_lugar = {x["slug"] for x in rots if x["categoria"] == "lugar"}
+                    sug = [x for x in sug if x[0] not in de_lugar] + [(s, 1.0) for s in perto]
+                con = C.abrir(db)
+                con.executescript(ESQUEMA)
+                r["sugeridas"] = gravar_sugestoes_corte(con, ct["id"], sug, c.get("modelo") or "")
+                con.commit()
+                con.close()
+                r["melhores"] = sug[:4]
+        except Exception as e:
+            r["erro"] = f"{type(e).__name__}: {str(e)[:160]}"
+        out.append(r)
+        rot = f"{nome or os.path.basename(caminho)} {ct['ini']:.1f}–{ct['fim']:.1f}s"
+        if "erro" in r:
+            print(f"[{k}/{len(lista)}] {rot}: erro {r['erro']}", flush=True)
+        else:
+            print(f"[{k}/{len(lista)}] {rot}: " + ", ".join(f"{s} {p:.2f}" for s, p in r.get("melhores") or []), flush=True)
     return out
 
 
@@ -373,17 +620,45 @@ def garantir_venv() -> None:
     sys.exit(f"sem o ambiente da IA em {caminhos.venv('sep')} (torch + transformers)")
 
 
+def decidir_cortes(ids: list[int], aceitar: bool, tags: list[str] | None = None, db: str | None = None) -> int:
+    """Como `decidir`, para os cortes: aceita vira tag do corte (por "ia")."""
+    ids = [int(i) for i in ids]
+    if not ids:
+        return 0
+    con = abrir(db)
+    sql = (f"select s.corte_id, s.tag_id from corte_sugestao s join tag t on t.id = s.tag_id "
+           f"where s.estado = 'pendente' and s.corte_id in ({','.join('?' * len(ids))})")
+    args: list = list(ids)
+    if tags:
+        sql += f" and t.slug in ({','.join('?' * len(tags))})"
+        args += [biblioteca.slug(t) for t in tags]
+    pares = con.execute(sql, args).fetchall()
+    for cid, tid in pares:
+        if aceitar:
+            con.execute("insert or ignore into corte_tag (corte_id, tag_id, por) values (?, ?, 'ia')", (cid, tid))
+        con.execute("update corte_sugestao set estado = ? where corte_id = ? and tag_id = ?",
+                    ("aceita" if aceitar else "recusada", cid, tid))
+    con.commit()
+    con.close()
+    return len(pares)
+
+
 def main() -> None:
     garantir_venv()
     ap = argparse.ArgumentParser()
     ap.add_argument("--id", type=int, action="append", default=[])
     ap.add_argument("--lista")
     ap.add_argument("--sem-ia", action="store_true", help="só os metadados e o GPS")
+    ap.add_argument("--cortes", action="store_true", help="os ids são de vídeos: sugere tags para cada corte deles")
     a = ap.parse_args()
     ids = list(a.id)
     if a.lista:
         with open(a.lista, encoding="utf-8") as fh:
             ids += [int(x) for x in fh.read().split() if x.strip()]
+    if a.cortes:
+        r = reconhecer_cortes(ids)
+        print(f"{sum(1 for x in r if 'erro' not in x)} de {len(r)} corte(s) · {sum(x.get('sugeridas', 0) for x in r)} sugestão(ões)")
+        return
     r = reconhecer(ids, usar_ia=not a.sem_ia)
     ok = sum(1 for x in r if "erro" not in x)
     print(f"{ok} de {len(r)} mídia(s) · {sum(x.get('sugeridas', 0) for x in r)} sugestão(ões) · "

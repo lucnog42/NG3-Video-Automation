@@ -14,6 +14,14 @@ categorias = ["lugar", "momento", "plano"]   # sem "pessoa" (a IA não reconhece
 dispositivo = "auto"               # auto | cuda | cpu (sem memória na GPU, cai para a CPU)
 modelos_dir = ""                   # onde baixar o modelo (vazio: <ambiente sep>/../hf)
 raio_gps_m = 300                   # raio padrão de um lugar sem raio próprio em lugares.toml
+exemplos_minimos = 5               # com N mídias marcadas por você numa tag, a IA aprende com elas
+escala_exemplos = 30.0             # quão decidida é a comparação com os exemplos
+detector_rosto = ""                # YuNet (vazio: <ambiente sep>/../modelos/face_detection_yunet_2023mar.onnx)
+
+# plano pelo tamanho do maior rosto (altura do rosto / altura do quadro, mediana dos quadros)
+[plano]
+fechado = 0.30                     # rosto com 30% da altura do quadro ou mais: plano fechado (close)
+medio = 0.14                       # 14%–30%: plano médio (da cintura para cima); abaixo, aberto (corpo inteiro ou mais longe)
 
 # lugar é a categoria que mais confunde (todo campo de futebol parece um CT): pede mais
 [por_categoria.lugar]

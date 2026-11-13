@@ -331,7 +331,16 @@ def listar(midia_ids: list[int], descartados: bool = False, db: str | None = Non
                      f"order by midia_id, ini", ids).fetchall()
     cids = [r["id"] for r in rs]
     tags: dict[int, list] = {}
+    sugs: dict[int, list] = {}
     if cids:
+        try:
+            for t in con.execute(f"select s.corte_id, s.score, t.slug, t.nome, t.categoria from corte_sugestao s join tag t "
+                                 f"on t.id = s.tag_id where s.estado = 'pendente' and s.corte_id in ({','.join('?' * len(cids))}) "
+                                 f"order by s.score desc", cids):
+                sugs.setdefault(t["corte_id"], []).append({"slug": t["slug"], "nome": t["nome"], "categoria": t["categoria"],
+                                                          "score": t["score"]})
+        except sqlite3.OperationalError:
+            pass
         for t in con.execute(f"select ct.corte_id, ct.por, t.slug, t.nome, t.origem from corte_tag ct join tag t "
                              f"on t.id = ct.tag_id where ct.corte_id in ({','.join('?' * len(cids))})", cids):
             tags.setdefault(t["corte_id"], []).append({"slug": t["slug"], "nome": t["nome"], "origem": t["origem"],
@@ -339,7 +348,8 @@ def listar(midia_ids: list[int], descartados: bool = False, db: str | None = Non
     con.close()
     return [{"id": r["id"], "midia": r["midia_id"], "ini": r["ini"], "fim": r["fim"], "origem": r["origem"],
              "proposto": bool(r["proposto"]), "protegido": bool(r["protegido"]), "descartado": bool(r["descartado"]),
-             "titulo": r["titulo"], "nota": r["nota"], "texto": r["texto"], "tags": tags.get(r["id"], [])} for r in rs]
+             "titulo": r["titulo"], "nota": r["nota"], "texto": r["texto"], "tags": tags.get(r["id"], []),
+             "sugestoes": sugs.get(r["id"], [])} for r in rs]
 
 
 def contagem(midia_ids: list[int], db: str | None = None) -> dict[int, dict]:
