@@ -586,6 +586,9 @@ pub struct Midia {
     /// o vídeo tem transcrição (words.json)
     #[serde(default)]
     pub transcrito: bool,
+    /// a transcrição rodou e não achou fala (ou o vídeo não tem áudio)
+    #[serde(default)]
+    pub sem_fala: bool,
     /// tags que a IA de imagem sugeriu e ninguém aceitou nem recusou ainda
     #[serde(default)]
     pub sugestoes: Vec<SugestaoIa>,

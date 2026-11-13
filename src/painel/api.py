@@ -253,9 +253,10 @@ def m_midia_transcrever(d):
     fila de tarefas. Já transcritos são pulados, salvo `forcar`. `separar`: auto | sempre | nunca."""
     from acervo import biblioteca
     from transcricao import separar
-    vids = biblioteca.videos([int(i) for i in d.get("ids") or []])
+    vids = biblioteca.videos([int(i) for i in d.get("ids") or []], sem_fala=bool(d.get("forcar")))
     if not vids:
-        raise ValueError("nenhum vídeo na seleção (imagens não são transcritas)")
+        raise ValueError("nenhum vídeo para transcrever na seleção (imagens não são transcritas; os sem fala só "
+                         "com \"refazer os já transcritos\")")
     if not os.path.exists(caminhos.python_de("asr")):
         raise ValueError(f"falta o ambiente da transcrição em {caminhos.venv('asr')}: crie com requirements-asr.txt "
                          "(ou aponte outro lugar em [ambientes] asr = \"...\" no config/local.toml)")

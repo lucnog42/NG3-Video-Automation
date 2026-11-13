@@ -249,6 +249,7 @@ fn seg_transcricao(s: &App, v: Vista, t: Tema) -> El {
     seg(format!("seg-transc-{v:?}"), vec![
         item("sim", format!("Transcritos {}", n("sim"))),
         item("nao", format!("Sem transcrição {}", n("nao"))),
+        item("sem_fala", format!("Sem fala {}", n("sem_fala"))),
         item("", "Qualquer".into()),
     ], t)
 }
@@ -324,6 +325,7 @@ fn card(s: &App, v: Vista, m: &Midia, t: Tema) -> El {
         .child(marca.absolute(8.0, 8.0))
         .child(if m.tipo == "video" {
             row().absolute(8.0, THUMB_H - 26.0).child(if m.transcrito { etiqueta("transcrito", t.ok) }
+                                                     else if m.sem_fala { etiqueta("sem fala", t.fraco) }
                                                      else { etiqueta("sem transcrição", t.dim) })
         } else { el() })
         .child(row().absolute(CARD_W - 16.0 - 8.0 - 44.0, THUMB_H - 26.0).w(44.0).child(spacer())
@@ -568,7 +570,7 @@ fn transcrever(s: &App, v: Vista, t: Tema) -> El {
     let b = &s.x.b;
     let carregados: Vec<&Midia> = vm.selecionados().collect();
     let videos = carregados.iter().filter(|m| m.tipo == "video").count();
-    let ja = carregados.iter().filter(|m| m.tipo == "video" && m.transcrito).count();
+    let ja = carregados.iter().filter(|m| m.tipo == "video" && (m.transcrito || m.sem_fala)).count();
     let fora_da_pagina = vm.selecao.len() > carregados.len();
     if videos == 0 && !fora_da_pagina {
         return col().w_full().gap(6.0).pt(4.0).child(comum::rotulo("transcrever", t))
@@ -577,7 +579,7 @@ fn transcrever(s: &App, v: Vista, t: Tema) -> El {
     let sep = |id: &'static str, rot: &'static str| seg_item(format!("sep-{v:?}-{id}"), rot, b.separar == id, t,
                                                              move |s: &mut App| s.x.b.separar = id.into());
     let resumo = if fora_da_pagina { "os vídeos selecionados (inclusive de outras páginas)".to_string() }
-        else if ja > 0 && !b.refazer { format!("{} vídeo(s); {ja} já transcrito(s) serão pulados", videos) }
+        else if ja > 0 && !b.refazer { format!("{} vídeo(s); {ja} já transcrito(s) ou sem fala serão pulados", videos) }
         else { format!("{videos} vídeo(s)") };
     let rotulo_botao = if fora_da_pagina { "transcrever os vídeos selecionados".to_string() }
         else { format!("transcrever {}", if b.refazer { videos } else { videos - ja }) };

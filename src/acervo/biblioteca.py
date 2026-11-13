@@ -15,8 +15,9 @@ pasta apontada) e as anotações.
   * cada subpasta da pasta importada vira tag com origem `pasta`;
   * arquivo movido dentro da fonte é reconhecido pelo hash rápido (tamanho + começo + fim)
     e só troca de caminho, sem perder as tags;
-  * `transcrito`: o vídeo tem words.json (conferido a cada sincronização e no fim de cada
-    tarefa de transcrição); vira filtro e etiqueta "transcrito" / "sem transcrição";
+  * `transcrito`: 1 = tem words.json; 2 = **sem fala** (a transcrição rodou e não achou palavra,
+    ou não há áudio: sai da lista "sem transcrição" e não é transcrito de novo, salvo "refazer");
+    0 = ainda não transcrito. Conferido a cada sincronização e no fim de cada tarefa;
   * arquivo que sumiu (disco desmontado, apagado fora do app) fica marcado `ausente`, nunca
     apagado do catálogo: as tags voltam quando ele reaparece.
 
@@ -263,6 +264,21 @@ def _tem_transcricao(caminho: str) -> bool:
     return os.path.exists(legendar.caminho_saida(alvo, ".words.json"))
 
 
+SEM_FALA = ("nenhuma palavra reconhecida", "sem áudio decodificável")
+
+
+def _sem_fala_da_fila() -> set[str]:
+    """Os vídeos (caminho absoluto) que a última transcrição deu como sem fala (srt_fila.csv)."""
+    import csv
+    arq = caminhos.dados("transcricao", "srt_fila.csv")
+    if not os.path.exists(arq):
+        return set()
+    base = config.carregar()["acervo"]["raiz"]
+    with open(arq, encoding="utf-8") as fh:
+        return {os.path.abspath(os.path.join(base, r["video"])) for r in csv.DictReader(fh)
+                if r.get("status") in ("erro", "sem_fala") and (r.get("erro") or "").startswith(SEM_FALA)}
+
+
 def _conferir_transcritos(con: sqlite3.Connection, fonte: str | None = None, caminhos_: list[str] | None = None) -> int:
     sql, args = "select id, caminho, transcrito from midia where tipo = 'video' and ausente = 0", []
     if fonte:
@@ -274,7 +290,17 @@ def _conferir_transcritos(con: sqlite3.Connection, fonte: str | None = None, cam
         quer = {os.path.abspath(c) for c in caminhos_}
         linhas = [r for r in linhas if os.path.abspath(r["caminho"] if os.path.isabs(r["caminho"])
                                                        else os.path.join(acervo, r["caminho"])) in quer]
-    mudou = [(int(t), r["id"]) for r in linhas if (t := _tem_transcricao(r["caminho"])) != bool(r["transcrito"])]
+    acervo = config.carregar()["acervo"]["raiz"]
+    sem_fala = _sem_fala_da_fila()
+    mudou = []
+    for r in linhas:
+        if _tem_transcricao(r["caminho"]):
+            novo = 1
+        else:
+            alvo = os.path.abspath(r["caminho"] if os.path.isabs(r["caminho"]) else os.path.join(acervo, r["caminho"]))
+            novo = 2 if (r["transcrito"] == 2 or alvo in sem_fala) else 0
+        if novo != r["transcrito"]:
+            mudou.append((novo, r["id"]))
     con.executemany("update midia set transcrito = ? where id = ?", mudou)
     return len(mudou)
 
@@ -290,13 +316,15 @@ def atualizar_transcritos(caminhos_: list[str] | None = None, db: str | None = N
     return n
 
 
-def videos(ids: list[int], db: str | None = None) -> list[str]:
-    """Os caminhos dos vídeos entre `ids` (a tarefa de transcrever ignora as imagens)."""
+def videos(ids: list[int], db: str | None = None, sem_fala: bool = False) -> list[str]:
+    """Os caminhos dos vídeos entre `ids` (a tarefa de transcrever ignora as imagens e, salvo
+    `sem_fala`, os que já se sabe que não têm fala)."""
     ids = [int(i) for i in ids]
     if not ids:
         return []
     con = abrir(db)
-    out = [r[0] for r in con.execute(f"select caminho from midia where tipo = 'video' and ausente = 0 "
+    extra = "" if sem_fala else " and transcrito != 2"
+    out = [r[0] for r in con.execute(f"select caminho from midia where tipo = 'video' and ausente = 0{extra} "
                                      f"and id in ({','.join('?' * len(ids))}) order by caminho", ids)]
     con.close()
     return out
@@ -452,9 +480,9 @@ def _filtros(f: dict) -> tuple[str, list]:
         sp = f["subpasta"].strip(os.sep)
         onde.append("(m.subpasta = ? or m.subpasta like ?)")
         args += [sp, sp + os.sep + "%"]
-    if f.get("transcricao") in ("sim", "nao"):
+    if f.get("transcricao") in ("sim", "nao", "sem_fala"):
         onde.append("m.tipo = 'video' and m.transcrito = ?")
-        args.append(1 if f["transcricao"] == "sim" else 0)
+        args.append({"sim": 1, "nao": 0, "sem_fala": 2}[f["transcricao"]])
     passo = f.get("passo") or ""
     if passo == "fila":
         onde.append(f"m.status_import in ({','.join('?' * len(FILA))})")
@@ -516,7 +544,7 @@ def listar(filtros: dict | None = None, limite: int = 120, offset: int = 0, db: 
               "renomeado": bool(r["nome_exibicao"]),
               "item": r["item"], "subpasta": r["subpasta"], "tipo": r["tipo"], "status": r["status_import"],
               "pilar": r["pilar"], "data": r["data"], "mb": round((r["tamanho"] or 0) / 1e6, 1),
-              "transcrito": bool(r["transcrito"]), "sugestoes": sugs.get(r["id"], []), "meta": metas.get(r["id"], {}),
+              "transcrito": r["transcrito"] == 1, "sem_fala": r["transcrito"] == 2, "sugestoes": sugs.get(r["id"], []), "meta": metas.get(r["id"], {}),
               "tags": tags_de.get(r["id"], [])} for r in linhas]
     return {"itens": itens, "total": total}
 
@@ -552,7 +580,8 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
     tipos = dict(contar("tipo", "select m.tipo, count(*) from midia m where {onde} group by m.tipo",
                         lambda r: (r[0], r[1])))
     transc = dict(contar("transcricao", "select m.transcrito, count(*) from midia m where {onde} and m.tipo = 'video' "
-                                        "group by m.transcrito", lambda r: ("sim" if r[0] else "nao", r[1])))
+                                        "group by m.transcrito",
+                        lambda r: ({1: "sim", 2: "sem_fala"}.get(r[0], "nao"), r[1])))
     fontes_n = dict(contar("fonte", "select m.fonte_id, count(*) from midia m where {onde} group by m.fonte_id",
                            lambda r: (r[0], r[1])))
     imps = contar("importacao", "select i.id, i.fonte_id, i.data, count(m.id) from midia m join importacao i "

@@ -187,6 +187,24 @@ class Biblioteca(unittest.TestCase):
         ids = [i["id"] for i in self.lista()["itens"]]
         self.assertEqual(len(biblioteca.videos(ids, db=self.db)), 3)
 
+    def test_sem_fala_sai_dos_sem_transcricao(self):
+        self.sinc()
+        solto = os.path.abspath(os.path.join(self.pasta, "solto.mp4"))
+        with mock.patch.object(biblioteca, "_tem_transcricao", return_value=False), \
+             mock.patch.object(biblioteca, "_sem_fala_da_fila", return_value={solto}):
+            biblioteca.atualizar_transcritos(db=self.db)
+        self.assertEqual([i["original"] for i in self.lista(transcricao="sem_fala")["itens"]], ["solto.mp4"])
+        self.assertEqual(self.lista(transcricao="nao")["total"], 2)
+        self.assertEqual(biblioteca.resumo({}, db=self.db)["transcricao"], {"nao": 2, "sem_fala": 1})
+        ids = [i["id"] for i in self.lista()["itens"]]
+        self.assertEqual(len(biblioteca.videos(ids, db=self.db)), 2)                 # pula o sem fala
+        self.assertEqual(len(biblioteca.videos(ids, db=self.db, sem_fala=True)), 3)  # "refazer" inclui
+        # continua sem fala depois que a fila muda; só volta se ganhar transcrição
+        with mock.patch.object(biblioteca, "_tem_transcricao", side_effect=lambda c: c == solto), \
+             mock.patch.object(biblioteca, "_sem_fala_da_fila", return_value=set()):
+            biblioteca.atualizar_transcritos(db=self.db)
+        self.assertEqual(self.lista(transcricao="sim")["total"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

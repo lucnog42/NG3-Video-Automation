@@ -53,7 +53,7 @@ fn lista(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                          t.txt, false, t, |s: &mut App| s.midia_selecionar_tudo(Vista::Cortes))))
         .child(busca)
         .child(seg("seg-cortes-tr", vec![tr("sim", format!("Transcritos {}", n("sim"))), tr("nao", format!("Sem {}", n("nao"))),
-                                         tr("", "Todos".into())], t));
+                                         tr("sem_fala", format!("Sem fala {}", n("sem_fala"))), tr("", "Todos".into())], t));
 
     let aberto = s.x.c.video.as_ref().map(|m| m.id);
     let mut itens = col().key("cortes-vlist").w_full().grow(1.0).min_h(0.0).gap(2.0).padding(8.0)
@@ -133,7 +133,8 @@ fn centro(s: &App, t: Tema, largura: Option<f32>) -> El {
     let cab = row().w_full().gap(8.0).center_y()
         .child(text(m.nome.clone()).font(tema::NORMAL_B).color(t.txt))
         .child(text(pasta_de(m)).font(tema::PEQ).color(t.dim).truncate().min_w(0.0))
-        .child(if m.transcrito { etiqueta("transcrito", t.ok) } else { etiqueta("sem transcrição", t.dim) })
+        .child(if m.transcrito { etiqueta("transcrito", t.ok) } else if m.sem_fala { etiqueta("sem fala", t.fraco) }
+               else { etiqueta("sem transcrição", t.dim) })
         .child(etiqueta(if m.na_fila() { "na fila" } else { "revisado" }, if m.na_fila() { t.alerta } else { t.ok }))
         .child(spacer())
         .child(botao("cortes-abrir-arq", "abrir arquivo", t.dim, false, t, move |s: &mut App| s.midia_abrir(&caminho)));
