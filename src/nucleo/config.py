@@ -103,6 +103,7 @@ def carregar(recarregar: bool = False) -> dict:
     cfg["estilo"] = (marca.get("estilo") or {}).get("estilo") or {}
     cfg["regras"] = marca.get("regras") or {}
     cfg["tags"] = marca.get("tags") or {}
+    cfg["lugares"] = (marca.get("lugares") or {}).get("lugares") or {}
     for k in ("legenda", "claude", "app"):
         if local.get(k):
             cfg[k] = _mesclar(cfg.get(k) or {}, local[k])

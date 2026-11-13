@@ -80,6 +80,7 @@ pub enum Pedido {
     MidiaSincronizar,
     /// monta a tarefa de transcrever os vídeos selecionados
     MidiaTranscrever(crate::midias::Vista),
+    MidiaReconhecer(crate::midias::Vista),
     // cortes (cortes.rs)
     CortesDe(i64),
     CortesSelecionados,

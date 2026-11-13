@@ -1,0 +1,21 @@
+# Reconhecimento de imagem (src/acervo/reconhecer.py, no ambiente sep, que tem o torch).
+# A IA só SUGERE tags da marca (aceite da pessoa no painel); nunca reconhece pessoas.
+
+modelo = "google/siglip-base-patch16-256-multilingual"   # entende as frases em português
+frase = "uma foto de {nome}"       # tag sem frase própria ([ia.<categoria>] em tags.toml da marca)
+quadros_por_video = 4              # quadros espalhados pelo vídeo; vale o melhor quadro de cada tag
+# Decisão relativa dentro de cada categoria: o SigLIP dá probabilidades absolutas baixas para frases
+# longas, mas separa bem qual lugar/momento/plano é o mais provável.
+relativo_min = 0.55                # parte da categoria (softmax entre as tags dela) do 1º colocado
+segundo_min = 0.30                 # categoria que aceita várias: o 2º entra se tiver isto
+evidencia_min = 0.005              # sigmoide mínima (abaixo, nada da categoria aparece na imagem)
+categorias = ["lugar", "momento", "plano"]   # sem "pessoa" (a IA não reconhece gente); evento e
+                                             # qualidade não se veem na imagem
+dispositivo = "auto"               # auto | cuda | cpu (sem memória na GPU, cai para a CPU)
+modelos_dir = ""                   # onde baixar o modelo (vazio: <ambiente sep>/../hf)
+raio_gps_m = 300                   # raio padrão de um lugar sem raio próprio em lugares.toml
+
+# lugar é a categoria que mais confunde (todo campo de futebol parece um CT): pede mais
+[por_categoria.lugar]
+relativo_min = 0.80
+evidencia_min = 0.02

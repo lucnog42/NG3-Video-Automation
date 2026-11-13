@@ -251,6 +251,21 @@ impl App {
                    json!({"ids": ids, "forcar": self.x.b.refazer, "separar": self.x.b.separar}));
     }
 
+    /// Metadados (GPS → lugar) e sugestões da IA de imagem para os selecionados, como tarefa.
+    pub fn midia_reconhecer(&mut self, v: Vista) {
+        let ids = self.ids_em_ordem(v);
+        if ids.is_empty() { return; }
+        self.pedir(Pedido::MidiaReconhecer(v), "midia_reconhecer", json!({"ids": ids}));
+    }
+
+    /// Aceita (vira tag) ou recusa (não volta) as sugestões dos selecionados; `tag` limita a uma.
+    pub fn midia_sugestao(&mut self, v: Vista, aceitar: bool, tag: Option<&str>) {
+        let ids = self.ids_em_ordem(v);
+        if ids.is_empty() { return; }
+        let tags: Vec<&str> = tag.into_iter().collect();
+        self.pedir(Pedido::MidiaAcao(v), "midia_sugestao", json!({"ids": ids, "aceitar": aceitar, "tags": tags}));
+    }
+
     /// Fim de uma tarefa de transcrição: atualiza "transcrito" na grade.
     pub fn transcricao_terminou(&mut self) {
         for v in [Vista::Acervo, Vista::Fila] {
@@ -321,6 +336,14 @@ impl App {
                 self.tags_recarregar();
             }
             Pedido::Tags => self.x.b.tags = serde_json::from_value(r).unwrap_or_default(),
+            Pedido::MidiaReconhecer(_) => {
+                let cmd: Vec<String> = serde_json::from_value(r["cmd"].clone()).unwrap_or_default();
+                if !cmd.is_empty() {
+                    self.rodar_processo("reconhecer", cmd);
+                    self.aviso = Some(format!("lendo metadados e reconhecendo {} mídia(s) (veja as tarefas)",
+                                              r["midias"].as_u64().unwrap_or(0)));
+                }
+            }
             Pedido::MidiaTranscrever(_) => {
                 let cmd: Vec<String> = serde_json::from_value(r["cmd"].clone()).unwrap_or_default();
                 let n = r["videos"].as_u64().unwrap_or(0);

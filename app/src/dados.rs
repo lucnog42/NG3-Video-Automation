@@ -586,6 +586,12 @@ pub struct Midia {
     /// o vídeo tem transcrição (words.json)
     #[serde(default)]
     pub transcrito: bool,
+    /// tags que a IA de imagem sugeriu e ninguém aceitou nem recusou ainda
+    #[serde(default)]
+    pub sugestoes: Vec<SugestaoIa>,
+    /// metadados lidos do arquivo (data, câmera, GPS, rotação…)
+    #[serde(default)]
+    pub meta: BTreeMap<String, String>,
     #[serde(default)]
     pub item: String,
     #[serde(default)]
@@ -602,6 +608,17 @@ pub struct Midia {
     pub mb: f32,
     #[serde(default)]
     pub tags: Vec<TagMidia>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct SugestaoIa {
+    pub slug: String,
+    #[serde(default)]
+    pub nome: String,
+    #[serde(default)]
+    pub categoria: String,
+    #[serde(default)]
+    pub score: f32,
 }
 
 impl Midia {

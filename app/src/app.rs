@@ -1321,7 +1321,7 @@ impl App {
                 self.motion_recarregar();
             }
             if dono == "inserir-motion" { self.motion_recarregar(); }
-            if dono == "transcrever" { self.transcricao_terminou(); }
+            if dono == "transcrever" || dono == "reconhecer" { self.transcricao_terminou(); self.tags_recarregar(); }
             if dono == "cortes-cena" { self.x.c.propondo = false; self.cortes_contar();
                 if let Some(id) = self.x.c.video.as_ref().map(|m| m.id) { self.cortes_recarregar(id); } }
             if dono == "video-ia" && !ok { self.motion_recarregar(); }
@@ -1573,7 +1573,7 @@ impl App {
                  | Pedido::Roteiro(_) | Pedido::RoteiroAcao(_) | Pedido::RoteiroAprovar(_) | Pedido::RoteiroExportar(_)
                  | Pedido::MotionHf(_) | Pedido::Biblioteca | Pedido::MotionReusar(_)) => self.resposta_extra(p, r),
             p @ (Pedido::Midias(..) | Pedido::MidiaIds(_) | Pedido::MidiaAcao(_) | Pedido::MidiaSincronizar
-                 | Pedido::MidiaTranscrever(_) | Pedido::Tags) => self.resposta_midias(p, r),
+                 | Pedido::MidiaTranscrever(_) | Pedido::MidiaReconhecer(_) | Pedido::Tags) => self.resposta_midias(p, r),
             p @ (Pedido::CortesDe(_) | Pedido::CortesSelecionados | Pedido::CortesContagem | Pedido::CorteTira(_)
                  | Pedido::CorteQuadros(_) | Pedido::CortePropor(_) | Pedido::CorteAcao) => self.resposta_cortes(p, r),
             Pedido::ModeloAplicar(chave) => {

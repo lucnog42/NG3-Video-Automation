@@ -353,6 +353,29 @@ def m_corte_copiar_tags(d):
     return {"n": cortes.copiar_tags_do_video(_ids(d))}
 
 
+def m_midia_reconhecer(d):
+    """A tarefa que lê os metadados (GPS → lugar) e pede à IA de imagem as sugestões de tag."""
+    from acervo import biblioteca
+    ids = _ids(d)
+    if not os.path.exists(caminhos.python_de("sep")):
+        raise ValueError(f"a IA de imagem usa o ambiente sep (torch + transformers), que não existe em {caminhos.venv('sep')}")
+    lista = caminhos.dados("reconhecimento", f"lista_{dt.datetime.now():%Y%m%d_%H%M%S}_{len(ids)}.txt")
+    with open(lista + ".tmp", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(map(str, ids)) + "\n")
+    os.replace(lista + ".tmp", lista)
+    cmd = ["python3", "src/acervo/reconhecer.py", "--lista", lista]
+    if d.get("sem_ia"):
+        cmd.append("--sem-ia")
+    return {"cmd": cmd, "midias": len(ids)}
+
+
+def m_midia_sugestao(d):
+    """Aceitar (vira tag, por "ia") ou recusar (não volta) as sugestões pendentes; `tags` limita."""
+    from acervo import reconhecer
+    tags = [str(t) for t in d.get("tags") or [] if str(t).strip()] or None
+    return {"n": reconhecer.decidir(_ids(d), bool(d.get("aceitar", True)), tags)}
+
+
 def m_tags(_):
     from acervo import biblioteca
     return biblioteca.tags()

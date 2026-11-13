@@ -120,7 +120,7 @@ fn main() {
                   ("compacto", cenas::compacto), ("legenda", cenas::legenda), ("paginas", cenas::paginas),
                   ("roteiros", cenas::roteiros), ("importar", cenas::importar), ("clientes", cenas::clientes),
                   ("roteiro_projeto", cenas::roteiro_projeto), ("acervo", cenas::acervo), ("fila", cenas::fila),
-                  ("acervo_pastas", cenas::acervo_pastas), ("acervo_tags", cenas::acervo_tags), ("cortes", cenas::cortes)],
+                  ("acervo_pastas", cenas::acervo_pastas), ("acervo_tags", cenas::acervo_tags), ("cortes", cenas::cortes), ("sugestoes", cenas::sugestoes)],
         ..AppSpec::new("Video Automation NG3", (1360.0, 860.0), App::novo, ui::view)
     });
 }
@@ -433,6 +433,14 @@ mod cenas {
         if let Some(id) = s.x.c.cortes.first().map(|c| c.id) { s.cortes_selecionar(id); }
         for im in s.x.c.imagens.values() { let _ = im.wait(); }
         s.querem_miniatura.clear();
+    }
+
+    /// Acervo filtrado pelo que tem sugestão da IA, com dois selecionados (painel com as sugestões).
+    pub fn sugestoes(s: &mut App) {
+        s.x.b.acervo.filtros.passo = "com_sugestoes".into();
+        carregar_biblioteca(s, crate::midias::Vista::Acervo, app::Aba::Acervo, json!({"passo": "com_sugestoes"}));
+        let ids: Vec<i64> = s.x.b.acervo.itens.iter().take(2).map(|m| m.id).collect();
+        s.x.b.acervo.selecao.extend(ids);
     }
 
     pub fn acervo_tags(s: &mut App) {

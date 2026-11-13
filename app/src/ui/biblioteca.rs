@@ -29,7 +29,7 @@ pub fn aba_acervo(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(seg_tipo(s, v, t))
         .child(seg_transcricao(s, v, t))
         .child(spacer())
-        .child(seg_passo(s, v, t, &[("", "Todos"), ("fila", "Na fila"), ("sem_tags", "Sem tag"), ("revisado", "Revisados")]))
+        .child(seg_passo(s, v, t, &[("", "Todos"), ("fila", "Na fila"), ("sem_tags", "Sem tag"), ("com_sugestoes", "Sugestões"), ("revisado", "Revisados")]))
         .child(botoes_selecao(s, v, t));
     corpo(s, v, t, k, col().w_full().gap(10.0).child(barra).child(navegador_pastas(s, v, t)).child(filtro_tags(s, v, t)))
 }
@@ -50,7 +50,7 @@ pub fn fila(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
         .child(seg_tipo(s, v, t))
         .child(seg_transcricao(s, v, t))
         .child(spacer())
-        .child(seg_passo(s, v, t, &[("fila", "Fila de revisão"), ("sem_tags", "Sem tag"), ("revisado", "Revisados"), ("", "Todos")]))
+        .child(seg_passo(s, v, t, &[("fila", "Fila de revisão"), ("sem_tags", "Sem tag"), ("com_sugestoes", "Sugestões"), ("revisado", "Revisados"), ("", "Todos")]))
         .child(botoes_selecao(s, v, t));
 
     let mut imps = row().w_full().gap(6.0).center_y().flex_wrap().child(comum::rotulo("importação", t).pr(4.0))
@@ -338,6 +338,10 @@ fn card(s: &App, v: Vista, m: &Midia, t: Tema) -> El {
     if m.tags.len() > 3 {
         tags = tags.child(text(format!("+{}", m.tags.len() - 3)).font(tema::PEQ).color(t.fraco));
     }
+    for sg in m.sugestoes.iter().take(2) {
+        tags = tags.child(row().h(20.0).px(7.0).center_y().radius(10.0).fill(t.rep.alpha(0.12)).border(1.0, t.rep.alpha(0.6))
+            .child(text(sg.nome.clone()).font(tema::PEQ).color(t.rep).truncate()));
+    }
     let fonte = s.x.fontes.iter().find(|f| f.id == m.fonte).map(|f| f.nome.clone()).unwrap_or_else(|| m.fonte.clone());
     let (cor_st, st) = if m.na_fila() { (t.alerta, "na fila") } else { (t.ok, "revisado") };
     let caminho = m.caminho.clone();
@@ -432,7 +436,9 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
         }
     }
 
-    if n > 0 { p = p.child(renomear(s, v, t, k)).child(transcrever(s, v, t)); }
+    if n > 0 {
+        p = p.child(sugestoes_ia(s, v, t)).child(metadados(s, v, t)).child(renomear(s, v, t, k)).child(transcrever(s, v, t));
+    }
 
     // estado de uma tag no painel: com seleção, "todos os selecionados (da página) têm"; sem, "está no filtro"
     let ligada = |slug: &str| if n > 0 {
@@ -590,4 +596,64 @@ fn transcrever(s: &App, v: Vista, t: Tema) -> El {
                 .on_press(move |s: &mut App| s.midia_transcrever(v))))
         .child(text("\"Se houver\" mede a música nas pausas da fala e só separa quando ela aparece. A tarefa roda \
                      um vídeo por vez na GPU e aparece em tarefas; pode fechar o painel, que ela continua.").font(tema::PEQ).color(t.fraco).wrap())
+}
+
+/// As sugestões da IA de imagem nos selecionados (somadas), com aceitar/recusar por tag ou todas,
+/// e o botão que roda o reconhecimento (metadados + GPS + IA) como tarefa.
+fn sugestoes_ia(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let mut conta: Vec<(String, String, usize)> = vec![];
+    for m in vm.selecionados() {
+        for sg in &m.sugestoes {
+            match conta.iter_mut().find(|x| x.0 == sg.slug) {
+                Some(x) => x.2 += 1,
+                None => conta.push((sg.slug.clone(), sg.nome.clone(), 1)),
+            }
+        }
+    }
+    conta.sort_by(|a, b| b.2.cmp(&a.2));
+    let mut c = col().w_full().gap(8.0).pt(4.0).child(comum::rotulo("sugestões da IA de imagem", t));
+    if conta.is_empty() {
+        c = c.child(text("Nenhuma sugestão pendente nos selecionados.").font(tema::PEQ).color(t.fraco));
+    } else {
+        let mut chips = row().w_full().gap(6.0).flex_wrap();
+        for (slug, nome, n) in &conta {
+            let (sl1, sl2) = (slug.clone(), slug.clone());
+            chips = chips.child(row().key(format!("sg-{v:?}-{slug}")).h(26.0).gap(0.0).center_y().radius(13.0)
+                .border(1.0, t.rep.alpha(0.6)).fill(t.rep.alpha(0.10))
+                .child(row().key(format!("sga-{v:?}-{slug}")).h_full().pl(10.0).pr(6.0).center_y().cursor(Cursor::Pointer)
+                    .hover(t.rep.alpha(0.18))
+                    .child(text(format!("{nome} {n} ✓")).font(tema::PEQ).color(t.rep))
+                    .on_press(move |s: &mut App| s.midia_sugestao(v, true, Some(&sl1))))
+                .child(row().key(format!("sgr-{v:?}-{slug}")).h_full().pl(4.0).pr(9.0).center_y().cursor(Cursor::Pointer)
+                    .hover(t.erro.alpha(0.18))
+                    .child(text("×").font(tema::PEQ_M).color(t.erro))
+                    .on_press(move |s: &mut App| s.midia_sugestao(v, false, Some(&sl2)))));
+        }
+        c = c.child(chips).child(row().w_full().gap(6.0)
+            .child(botao(format!("sg-todas-{v:?}"), "aceitar todas", t.ok, false, t, move |s: &mut App| s.midia_sugestao(v, true, None)))
+            .child(botao(format!("sg-nenhuma-{v:?}"), "recusar todas", t.erro, false, t, move |s: &mut App| s.midia_sugestao(v, false, None))));
+    }
+    c.child(row().w_full().gap(8.0).center_y()
+            .child(text("Lê data, câmera e GPS (GPS perto de um lugar da marca vira tag) e a IA sugere lugar, momento e plano.")
+                .font(tema::PEQ).color(t.fraco).wrap().grow(1.0).min_w(0.0))
+            .child(botao(format!("reconhecer-{v:?}"), "reconhecer", t.rep, false, t, move |s: &mut App| s.midia_reconhecer(v))))
+}
+
+/// Os metadados de um selecionado (data, câmera, GPS, rotação), quando já foram lidos.
+fn metadados(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    if vm.selecao.len() != 1 { return el(); }
+    let Some(m) = vm.selecionados().next() else { return el() };
+    if m.meta.is_empty() { return el(); }
+    let g = |k: &str| m.meta.get(k).cloned().unwrap_or_default();
+    let mut linhas = vec![];
+    if !g("data").is_empty() { linhas.push(format!("data: {}", g("data"))); }
+    if !g("camera").is_empty() { linhas.push(format!("câmera: {}", g("camera"))); }
+    if !g("lat").is_empty() { linhas.push(format!("GPS: {}, {}", g("lat"), g("lon"))); }
+    if !g("largura").is_empty() { linhas.push(format!("{} × {}{}", g("largura"), g("altura"),
+        if g("rotacao").is_empty() { String::new() } else { format!(" · girado {}", g("rotacao")) })); }
+    if !g("duracao").is_empty() { linhas.push(format!("duração: {:.1} s", g("duracao").parse::<f32>().unwrap_or(0.0))); }
+    col().w_full().gap(4.0).pt(4.0).child(comum::rotulo("metadados do arquivo", t))
+        .child(text(linhas.join("\n")).font(tema::PEQ.lh(17.0)).color(t.dim).selectable(true).wrap())
 }

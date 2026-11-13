@@ -14,7 +14,15 @@ Decisões tomadas com o Lucas (2026-11-13):
 - **Roteiros**: menos engessados, com espaço real para input humano.
 - **Projetos**: edição integrada ao FilmCraft (ida e volta), não só geração.
 
-**Removido do roadmap (2026-11-13):** a IA que reconhece imagens e vídeos — classificação com
+**Voltou ao escopo (2026-11-13, pedido do Lucas): IA que olha a imagem, só para sugerir.**
+`src/acervo/reconhecer.py` (ambiente `sep`): lê os metadados de cada mídia (data, câmera, GPS,
+rotação); GPS dentro do raio de um lugar de `config/marcas/<marca>/lugares.toml` vira tag direto
+(por "metadados"); o SigLIP multilíngue compara quadros/fotos com as tags de lugar, momento e plano
+(frases em `[ia.*]` do `tags.toml`) e grava **sugestões pendentes** — a pessoa aceita ou recusa no
+painel, e recusada não volta. Sem "pessoa" (a IA não reconhece gente), sem evento e qualidade (não
+se veem na imagem); com GPS, a IA não sugere outro lugar. Config: `config/padroes/reconhecimento.toml`.
+
+**Removido do roadmap (2026-11-13, antes da volta acima):** a IA que reconhece imagens e vídeos — classificação com
 V-JEPA 2 + SigLIP, sugestão de tag com aceite em um clique (`ia_sugerida`/`ia_aceita`), tag nova
 proposta por IA, lista de recomendações da IA no gerenciador e o limiar de novidade. Continuam
 as IAs de texto e áudio: transcrição, ideia de roteiro e "reescrever parte".

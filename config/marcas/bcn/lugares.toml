@@ -1,0 +1,37 @@
+# Lugares com coordenadas: o GPS dos metadados (fotos e vídeos de celular/câmera) vira a tag de
+# Local quando cai dentro do raio. O slug é o da tag em tags.toml. Coordenadas aproximadas.
+
+[lugares.camp-nou]
+lat = 41.3809
+lon = 2.1228
+raio_m = 400
+
+[lugares.la-masia]          # Ciutat Esportiva Joan Gamper (Sant Joan Despí)
+lat = 41.3640
+lon = 2.0480
+raio_m = 700
+
+[lugares.tibidabo]
+lat = 41.4225
+lon = 2.1186
+raio_m = 900
+
+[lugares.barcelona]
+lat = 41.3874
+lon = 2.1686
+raio_m = 9000
+
+[lugares.lloret]
+lat = 41.6997
+lon = 2.8456
+raio_m = 3500
+
+[lugares.girona]
+lat = 41.9794
+lon = 2.8214
+raio_m = 6000
+
+[lugares.madrid]
+lat = 40.4168
+lon = -3.7038
+raio_m = 15000

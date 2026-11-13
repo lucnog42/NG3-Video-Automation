@@ -63,6 +63,11 @@ create index if not exists midia_hash on midia (hash_rapido);
 create table if not exists tag (
     id integer primary key, slug text unique not null, nome text not null, categoria text default '',
     origem text not null);
+create table if not exists midia_meta (midia_id integer not null, chave text not null, valor text,
+    primary key (midia_id, chave));
+create table if not exists midia_sugestao (midia_id integer not null, tag_id integer not null, score real,
+    estado text not null default 'pendente', modelo text default '', criado_em real,
+    primary key (midia_id, tag_id));
 create table if not exists midia_tag (
     midia_id integer not null, tag_id integer not null, por text not null,
     primary key (midia_id, tag_id));
@@ -459,6 +464,8 @@ def _filtros(f: dict) -> tuple[str, list]:
     elif passo == "com_tags":
         onde.append("exists (select 1 from midia_tag mt join tag t on t.id = mt.tag_id "
                     "where mt.midia_id = m.id and t.origem != 'pasta')")
+    elif passo == "com_sugestoes":
+        onde.append("exists (select 1 from midia_sugestao s where s.midia_id = m.id and s.estado = 'pendente')")
     elif passo == "sem_tags":
         onde.append("not exists (select 1 from midia_tag mt join tag t on t.id = mt.tag_id "
                     "where mt.midia_id = m.id and t.origem != 'pasta')")
@@ -493,13 +500,23 @@ def listar(filtros: dict | None = None, limite: int = 120, offset: int = 0, db: 
                              f"join tag t on t.id = mt.tag_id where mt.midia_id in ({','.join('?' * len(ids))})", ids):
             tags_de.setdefault(r["midia_id"], []).append(
                 {"slug": r["slug"], "nome": r["nome"], "origem": r["origem"], "categoria": r["categoria"], "por": r["por"]})
+    sugs: dict[int, list] = {}
+    metas: dict[int, dict] = {}
+    if ids:
+        q = ",".join("?" * len(ids))
+        for r in con.execute(f"select s.midia_id, s.score, t.slug, t.nome, t.categoria from midia_sugestao s join tag t "
+                             f"on t.id = s.tag_id where s.estado = 'pendente' and s.midia_id in ({q}) order by s.score desc", ids):
+            sugs.setdefault(r["midia_id"], []).append({"slug": r["slug"], "nome": r["nome"], "categoria": r["categoria"],
+                                                       "score": r["score"]})
+        for r in con.execute(f"select midia_id, chave, valor from midia_meta where midia_id in ({q})", ids):
+            metas.setdefault(r["midia_id"], {})[r["chave"]] = r["valor"]
     con.close()
     itens = [{"id": r["id"], "fonte": r["fonte_id"], "caminho": r["caminho"],
               "nome": r["nome_exibicao"] or os.path.basename(r["caminho"]), "original": os.path.basename(r["caminho"]),
               "renomeado": bool(r["nome_exibicao"]),
               "item": r["item"], "subpasta": r["subpasta"], "tipo": r["tipo"], "status": r["status_import"],
               "pilar": r["pilar"], "data": r["data"], "mb": round((r["tamanho"] or 0) / 1e6, 1),
-              "transcrito": bool(r["transcrito"]),
+              "transcrito": bool(r["transcrito"]), "sugestoes": sugs.get(r["id"], []), "meta": metas.get(r["id"], {}),
               "tags": tags_de.get(r["id"], [])} for r in linhas]
     return {"itens": itens, "total": total}
 
@@ -529,7 +546,7 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
         return [por_linha(r) for r in con.execute(sql.format(onde=onde), args)]
 
     passos = {}
-    for p in ("", "fila", "com_tags", "sem_tags", "revisado"):
+    for p in ("", "fila", "com_tags", "sem_tags", "revisado", "com_sugestoes"):
         onde, args = _filtros({**f, "passo": p})
         passos[p or "todos"] = con.execute(f"select count(*) from midia m where {onde}", args).fetchone()[0]
     tipos = dict(contar("tipo", "select m.tipo, count(*) from midia m where {onde} group by m.tipo",

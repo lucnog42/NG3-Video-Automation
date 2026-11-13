@@ -31,3 +31,31 @@ tags = { "aberto" = "Aberto", "medio" = "Médio", "fechado" = "Fechado", "detalh
 nome = "Qualidade"
 multipla = false
 tags = { "otima" = "Ótima", "usavel" = "Usável", "ruim" = "Ruim" }
+
+# Frases que a IA de imagem compara com cada tag (src/acervo/reconhecer.py). Sem frase, usa
+# "uma foto de <nome>". Só as categorias de reconhecimento.categorias entram.
+[ia.lugar]
+camp-nou = "o estádio Camp Nou do Barcelona"
+la-masia = "um centro de treinamento de futebol com vários campos de grama"
+tibidabo = "a montanha do Tibidabo com o parque de diversões e a igreja"
+barcelona = "as ruas e prédios da cidade de Barcelona"
+lloret = "uma praia com areia e mar em Lloret de Mar"
+girona = "o centro histórico da cidade de Girona"
+madrid = "a cidade de Madrid"
+
+[ia.momento]
+chegada = "um grupo de jovens chegando no aeroporto com malas"
+treino = "um treino de futebol com cones e exercícios"
+jogo = "uma partida de futebol com dois times em campo"
+bastidor = "bastidores do time no vestiário, no ônibus ou no hotel"
+depoimento = "uma pessoa falando para a câmera em primeiro plano"
+torcida-pais = "pais e torcida assistindo na arquibancada"
+turismo = "jovens passeando como turistas num ponto turístico"
+premiacao = "uma cerimônia de premiação com troféu e medalhas"
+
+[ia.plano]
+aberto = "uma imagem aberta que mostra o lugar inteiro de longe"
+medio = "pessoas enquadradas da cintura para cima"
+fechado = "um close do rosto de uma pessoa"
+detalhe = "um detalhe de um objeto visto de muito perto"
+drone = "uma vista aérea feita com drone"
