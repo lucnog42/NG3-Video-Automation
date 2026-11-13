@@ -678,14 +678,63 @@ def m_processo(d):
         if len(cmd) < 2:
             raise ValueError("python3 precisa de um script")
         cmd = [sys.executable, _script(cmd[1]), *cmd[2:]]
-    return _iniciar(cmd, str(d.get("dono") or "plugin"))
+    return _iniciar_destacada(cmd, str(d.get("dono") or "plugin"))
+
+
+_ACOMPANHANDO: set[str] = set()
+
+
+def _acompanhar(tid: str, ultimas: int | None = None) -> None:
+    from painel import tarefas
+    if tid in _ACOMPANHANDO:
+        return
+    _ACOMPANHANDO.add(tid)
+
+    def rodar():
+        try:
+            tarefas.acompanhar(tid, emitir, ultimas)
+        finally:
+            _ACOMPANHANDO.discard(tid)
+    threading.Thread(target=rodar, daemon=True).start()
+
+
+def _iniciar_destacada(cmd: list[str], dono: str) -> dict:
+    """A tarefa roda fora do motor (sessão própria, saída num log em dados/): fechar o painel
+    não a derruba. O motor só repassa as linhas do log ao app."""
+    from painel import tarefas
+    reg = tarefas.iniciar(cmd, dono, BASE)
+    emitir({"evento": "tarefa", "tarefa": reg["id"], "inicio": True, "dono": dono,
+            "comando": " ".join(shlex.quote(c) for c in cmd)})
+    _acompanhar(reg["id"])
+    return {"tarefa": reg["id"], "comando": " ".join(shlex.quote(c) for c in cmd)}
+
+
+def m_tarefas_retomar(_):
+    """Ao abrir o painel: as tarefas que continuaram rodando com ele fechado voltam a aparecer,
+    e as que terminaram nesse meio tempo mostram o resultado uma vez."""
+    from painel import tarefas
+    n = 0
+    for r in tarefas.listar():
+        if r["estado"] != "rodando" and r.get("visto_fim"):
+            continue
+        emitir({"evento": "tarefa", "tarefa": r["id"], "inicio": True, "dono": r.get("dono", ""),
+                "comando": " ".join(shlex.quote(c) for c in r.get("cmd") or []), "retomada": True})
+        _acompanhar(r["id"], ultimas=200)
+        n += 1
+    return {"retomadas": n}
 
 
 def m_cancelar(d):
-    p = _TAREFAS.get(str(d.get("tarefa")))
+    from painel import tarefas
+    tid = str(d.get("tarefa"))
+    p = _TAREFAS.get(tid)
     if p:
         p.terminate()
-    return {"cancelada": bool(p)}
+        return {"cancelada": True}
+    try:
+        return {"cancelada": tarefas.cancelar(tid)}
+    except ValueError:
+        return {"cancelada": False}
 
 
 # ------------------------------------------------------------------ claude

@@ -588,5 +588,5 @@ fn transcrever(s: &App, v: Vista, t: Tema) -> El {
                 .child(text(rotulo_botao).font(tema::PEQ_M).color(tema::tinta_acento()))
                 .on_press(move |s: &mut App| s.midia_transcrever(v))))
         .child(text("\"Se houver\" mede a música nas pausas da fala e só separa quando ela aparece. A tarefa roda \
-                     um vídeo por vez na GPU e aparece em tarefas.").font(tema::PEQ).color(t.fraco).wrap())
+                     um vídeo por vez na GPU e aparece em tarefas; pode fechar o painel, que ela continua.").font(tema::PEQ).color(t.fraco).wrap())
 }

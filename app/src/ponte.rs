@@ -89,6 +89,9 @@ pub enum Pedido {
     /// origem: fala | cena
     CortePropor(String),
     CorteAcao,
+    /// ao abrir: as tarefas que seguiram rodando com o painel fechado
+    TarefasRetomar,
+    Cancelar,
     Tags,
     MotionReusar(String),
 }

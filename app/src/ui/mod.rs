@@ -354,10 +354,14 @@ fn tarefas(s: &App, t: Tema) -> El {
         };
         let ultimas: Vec<&str> = tf.linhas.iter().rev().take(12).map(String::as_str).collect::<Vec<_>>().into_iter().rev().collect();
         c = c.child(col().key(format!("t-{}", tf.id)).w_full().gap(4.0)
-            .child(row().gap(8.0).center_y()
+            .child(row().w_full().gap(8.0).center_y()
                 .child(comum::etiqueta(st, cor))
                 .child(text(tf.dono.clone()).font(tema::PEQ_M).color(t.txt))
-                .child(text(tf.comando.clone()).font(tema::MONO).color(t.dim).truncate().grow(1.0).min_w(0.0)))
+                .child(text(tf.comando.clone()).font(tema::MONO).color(t.dim).truncate().grow(1.0).min_w(0.0))
+                .child(if tf.fim.is_none() {
+                    let id = tf.id.clone();
+                    botao(format!("cancel-{}", tf.id), "cancelar", t.erro, false, t, move |s: &mut App| s.cancelar_tarefa(&id))
+                } else { el() }))
             .child(text(ultimas.join("\n")).font(tema::MONO.lh(16.0)).color(t.dim).selectable(true).wrap_anywhere()));
     }
     c

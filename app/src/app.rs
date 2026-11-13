@@ -340,6 +340,7 @@ impl App {
                 p.pedir(Pedido::Estados, "estados", json!({}));
                 p.pedir(Pedido::Posts, "posts", json!({}));
                 p.pedir(Pedido::Cortes, "cortes", json!({}));
+                p.pedir(Pedido::TarefasRetomar, "tarefas_retomar", json!({}));
                 self.ponte = Some(p);
             }
             Err(e) => {
@@ -1210,6 +1211,12 @@ impl App {
         self.tarefas_abertas = true;
     }
 
+    /// Cancela uma tarefa (mata o grupo de processos dela, mesmo que tenha sido retomada).
+    pub fn cancelar_tarefa(&mut self, id: &str) {
+        self.pedir(Pedido::Cancelar, "cancelar", json!({"tarefa": id}));
+        self.aviso = Some("cancelando a tarefa…".into());
+    }
+
     pub fn rodar_processo(&mut self, dono: &str, cmd: Vec<String>) {
         let tag = format!("{dono}:{}", self.tarefas.len());
         self.pedir(Pedido::Processo(tag), "processo", json!({"cmd": cmd, "dono": dono}));
@@ -1219,6 +1226,7 @@ impl App {
     fn evento_tarefa(&mut self, v: &Value) -> bool {
         let id = v["tarefa"].as_str().unwrap_or("").to_string();
         if v.get("inicio").is_some() {
+            if self.tarefas.iter().any(|t| t.id == id) { return false; }   // retomada de novo
             self.tarefas.push(Tarefa {
                 id, dono: v["dono"].as_str().unwrap_or("").into(),
                 comando: v["comando"].as_str().unwrap_or("").into(), linhas: VecDeque::new(), fim: None,
@@ -1341,6 +1349,16 @@ impl App {
     fn resposta(&mut self, pedido: Pedido, r: Value) {
         match pedido {
             Pedido::Ping => { self.ler_marca(&r); self.ler_chave_info(&r) }
+            Pedido::Cancelar => {
+                if r["cancelada"].as_bool() != Some(true) { self.aviso = Some("a tarefa já tinha terminado".into()); }
+            }
+            Pedido::TarefasRetomar => {
+                let n = r["retomadas"].as_u64().unwrap_or(0);
+                if n > 0 {
+                    self.tarefas_abertas = true;
+                    self.aviso = Some(format!("{n} tarefa(s) seguiram com o painel fechado (veja as tarefas)"));
+                }
+            }
             Pedido::TrocarMarca => {
                 self.aviso = Some(format!("marca ativa: {}", r["marca"].as_str().unwrap_or("")));
                 self.reiniciar = true;
