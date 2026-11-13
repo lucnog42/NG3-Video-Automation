@@ -98,7 +98,8 @@ fn main() {
                   ("plugins", cenas::plugins),
                   ("compacto", cenas::compacto), ("legenda", cenas::legenda), ("paginas", cenas::paginas),
                   ("roteiros", cenas::roteiros), ("importar", cenas::importar), ("clientes", cenas::clientes),
-                  ("roteiro_projeto", cenas::roteiro_projeto), ("acervo", cenas::acervo), ("fila", cenas::fila)],
+                  ("roteiro_projeto", cenas::roteiro_projeto), ("acervo", cenas::acervo), ("fila", cenas::fila),
+                  ("acervo_pastas", cenas::acervo_pastas), ("acervo_tags", cenas::acervo_tags)],
         ..AppSpec::new("Video Automation NG3", (1360.0, 860.0), App::novo, ui::view)
     });
 }
@@ -377,5 +378,20 @@ mod cenas {
 
     pub fn fila(s: &mut App) {
         carregar_biblioteca(s, crate::midias::Vista::Fila, app::Aba::Importar, json!({"importadas": true, "passo": "fila"}));
+        let ids: Vec<i64> = s.x.b.fila.itens.iter().take(3).map(|m| m.id).collect();
+        s.x.b.fila.selecao.extend(ids);
+    }
+
+    pub fn acervo_pastas(s: &mut App) {
+        s.x.b.acervo.filtros.modo = crate::midias::Modo::Pasta;
+        s.x.b.acervo.filtros.fonte = "posts".into();
+        s.x.b.acervo.filtros.subpasta = "_posts".into();
+        carregar_biblioteca(s, crate::midias::Vista::Acervo, app::Aba::Acervo,
+                            json!({"fonte": "posts", "subpasta": "_posts", "exata": true}));
+    }
+
+    pub fn acervo_tags(s: &mut App) {
+        s.x.b.acervo.filtros.modo = crate::midias::Modo::Tags;
+        carregar_biblioteca(s, crate::midias::Vista::Acervo, app::Aba::Acervo, json!({}));
     }
 }

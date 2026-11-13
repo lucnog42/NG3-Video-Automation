@@ -194,8 +194,8 @@ def _sincronizar_biblioteca(so: str | None = None) -> bool:
 
 def _filtros_midia(d: dict) -> dict:
     f = d.get("filtros") or {}
-    return {k: f[k] for k in ("importadas", "fonte", "tipo", "importacao", "subpasta", "passo", "tags", "busca", "ordem")
-            if f.get(k) not in (None, "", [])}
+    return {k: f[k] for k in ("importadas", "fonte", "tipo", "importacao", "subpasta", "exata", "passo", "tags", "busca",
+                              "ordem") if f.get(k) not in (None, "", [], False)}
 
 
 def m_midias(d):
@@ -233,6 +233,15 @@ def m_midia_revisar(d):
     if not ids:
         raise ValueError("nenhuma mídia selecionada")
     return {"n": biblioteca.revisar(ids, bool(d.get("revisado", True)))}
+
+
+def m_midia_renomear(d):
+    """Nome no catálogo (o arquivo no disco fica como está): um nome, ou um padrão para vários."""
+    from acervo import biblioteca
+    ids = [int(i) for i in d.get("ids") or []]
+    if not ids:
+        raise ValueError("nenhuma mídia selecionada")
+    return {"nomes": biblioteca.renomear(ids, str(d.get("padrao") or ""), int(d.get("inicio") or 1))}
 
 
 def m_tags(_):

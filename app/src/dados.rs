@@ -575,8 +575,14 @@ pub struct Midia {
     pub fonte: String,
     #[serde(default)]
     pub caminho: String,
+    /// nome no catálogo (o renomeado, se houver)
     #[serde(default)]
     pub nome: String,
+    /// nome do arquivo no disco
+    #[serde(default)]
+    pub original: String,
+    #[serde(default)]
+    pub renomeado: bool,
     #[serde(default)]
     pub item: String,
     #[serde(default)]

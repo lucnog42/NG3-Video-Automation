@@ -6,8 +6,12 @@ posts publicados, pastas de cortes e as pastas apontadas na aba Importar. Nada �
 nem escrito nas pastas: o catálogo guarda o caminho (relativo ao acervo, ou absoluto numa
 pasta apontada) e as anotações.
 
-  * mídia nova de uma pasta importada entra na **fila de revisão** (`novo`); o que já está
-    no acervo publicado (posts, cortes) entra como `revisado`;
+  * mídia nova de uma pasta importada entra na **fila de revisão** (`novo`); vídeo do acervo
+    publicado (posts, cortes) entra como `revisado`; **imagem nunca é revisada sozinha**:
+    sempre entra na fila, de qualquer fonte;
+  * renomear muda só o **nome no catálogo** (`nome_exibicao`); o arquivo no disco fica igual;
+  * `subpasta` é a pasta do arquivo relativa à raiz da fonte (ou ao acervo, em posts e
+    cortes): é por ela que a grade navega em pastas e subpastas;
   * cada subpasta da pasta importada vira tag com origem `pasta`;
   * arquivo movido dentro da fonte é reconhecido pelo hash rápido (tamanho + começo + fim)
     e só troca de caminho, sem perder as tags;
@@ -50,6 +54,7 @@ create table if not exists midia (
     item text default '', subpasta text default '', tipo text not null, tamanho integer default 0,
     hash_rapido text default '', status_import text not null default 'novo', pilar text default '',
     data text default '', ausente integer default 0, criado_em real, revisado_em real,
+    nome_exibicao text default '',
     unique (fonte_id, caminho));
 create index if not exists midia_status on midia (status_import);
 create index if not exists midia_hash on midia (hash_rapido);
@@ -72,7 +77,31 @@ def abrir(db: str | None = None) -> sqlite3.Connection:
     con = sqlite3.connect(alvo, timeout=30)
     con.row_factory = sqlite3.Row
     con.executescript(ESQUEMA)
+    _migrar(con)
     return con
+
+
+VERSAO = 2
+
+
+def _migrar(con: sqlite3.Connection) -> None:
+    """Catálogos criados antes: nome de exibição, pasta de posts e cortes, imagens de volta à fila."""
+    v = con.execute("pragma user_version").fetchone()[0]
+    if v >= VERSAO:
+        return
+    cols = {r[1] for r in con.execute("pragma table_info(midia)")}
+    if "nome_exibicao" not in cols:
+        con.execute("alter table midia add column nome_exibicao text default ''")
+    if v < 2:
+        # posts e cortes guardavam subpasta vazia: passa a ser a pasta do arquivo no acervo
+        linhas = con.execute("select id, caminho from midia where subpasta = '' and caminho not like '/%'").fetchall()
+        con.executemany("update midia set subpasta = ? where id = ?",
+                        [(os.path.dirname(r[1]), r[0]) for r in linhas if os.path.dirname(r[1])])
+        # imagem revisada "sozinha" (no mesmo instante em que entrou) volta para a fila
+        con.execute("update midia set status_import = 'novo', revisado_em = null "
+                    "where tipo = 'imagem' and status_import = 'revisado' and revisado_em = criado_em")
+    con.execute(f"pragma user_version = {VERSAO}")
+    con.commit()
 
 
 def slug(nome: str) -> str:
@@ -112,13 +141,13 @@ def _entradas(f: dict) -> list[dict]:
             for m in p.get("midias") or []:
                 t = _tipo(m)
                 if t:
-                    out.append({"caminho": m, "tipo": t, "item": p.get("pasta") or "", "subpasta": "",
+                    out.append({"caminho": m, "tipo": t, "item": p.get("pasta") or "", "subpasta": os.path.dirname(m),
                                 "pilar": p.get("pilar") or "", "data": p.get("data") or ""})
     elif tipo_fonte == "cortes":
         from acervo import listas
         for c in listas.montar_cortes(limite_fala=0):
             for v in c.get("videos") or []:
-                out.append({"caminho": v, "tipo": "video", "item": c.get("arquivo") or "", "subpasta": "",
+                out.append({"caminho": v, "tipo": "video", "item": c.get("arquivo") or "", "subpasta": os.path.dirname(v),
                             "pilar": c.get("pilar") or "", "data": ""})
     else:
         from acervo import fontes as F
@@ -134,6 +163,11 @@ def _entradas(f: dict) -> list[dict]:
 
 def _e_importada(f: dict) -> bool:
     return f.get("tipo") not in ("posts", "cortes")
+
+
+def _status_inicial(importada: bool, tipo: str) -> str:
+    """Só vídeo do acervo publicado já nasce revisado; imagem e pasta importada vão para a fila."""
+    return "revisado" if not importada and tipo == "video" else "novo"
 
 
 def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[dict] | None = None) -> dict:
@@ -184,9 +218,9 @@ def sincronizar(so: str | None = None, db: str | None = None, fontes_cfg: list[d
                 "insert into midia (fonte_id, importacao_id, caminho, item, subpasta, tipo, tamanho, hash_rapido, "
                 "status_import, pilar, data, criado_em, revisado_em) values (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (f["id"], imp_id, e["caminho"], e["item"], e["subpasta"], e["tipo"], tam, h,
-                 "novo" if importada else "revisado", e["pilar"], e["data"], agora,
-                 None if importada else agora)).lastrowid
-            for parte in [p for p in e["subpasta"].split(os.sep) if p]:
+                 _status_inicial(importada, e["tipo"]), e["pilar"], e["data"], agora,
+                 agora if _status_inicial(importada, e["tipo"]) == "revisado" else None)).lastrowid
+            for parte in [p for p in e["subpasta"].split(os.sep) if p and importada]:
                 _marcar(con, mid, _garantir_tag(con, parte, origem="pasta"), "pasta")
             novos += 1
         ausentes = 0
@@ -271,6 +305,43 @@ def revisar(ids: list[int], revisado: bool = True, db: str | None = None) -> int
     return n
 
 
+def _formatar(padrao: str, m: sqlite3.Row, n: int, largura: int) -> str:
+    """Aplica o padrão de nome: {n} sequência, {nome} nome original sem extensão, {pasta} última
+    pasta, {data} data da mídia. Sem extensão no padrão, mantém a do arquivo."""
+    base, ext = os.path.splitext(os.path.basename(m["caminho"]))
+    pasta = os.path.basename((m["subpasta"] or "").rstrip(os.sep))
+    nome = (padrao.replace("{n}", str(n).zfill(largura)).replace("{nome}", base)
+            .replace("{pasta}", pasta).replace("{data}", m["data"] or ""))
+    nome = re.sub(r"\s+", " ", nome.replace(os.sep, "-")).strip()
+    if nome and not os.path.splitext(nome)[1]:
+        nome += ext
+    return nome
+
+
+def renomear(ids: list[int], padrao: str, inicio: int = 1, db: str | None = None) -> list[dict]:
+    """Muda o **nome no catálogo** (o arquivo no disco não é tocado). Um id com um nome fixo
+    renomeia um arquivo; vários ids com um padrão ({n}, {nome}, {pasta}, {data}) renomeiam em lote,
+    na ordem de `ids`. Padrão vazio volta ao nome original."""
+    ids = [int(i) for i in ids]
+    if not ids:
+        return []
+    con = abrir(db)
+    linhas = {r["id"]: r for r in con.execute(
+        f"select id, caminho, subpasta, data from midia where id in ({','.join('?' * len(ids))})", ids)}
+    largura = max(2, len(str(inicio + len(ids) - 1)))
+    feitos = []
+    for k, i in enumerate(ids):
+        m = linhas.get(i)
+        if m is None:
+            continue
+        novo = _formatar(padrao.strip(), m, inicio + k, largura) if padrao.strip() else ""
+        con.execute("update midia set nome_exibicao = ? where id = ?", (novo, i))
+        feitos.append({"id": i, "nome": novo or os.path.basename(m["caminho"])})
+    con.commit()
+    con.close()
+    return feitos
+
+
 def tags(db: str | None = None) -> dict:
     """As categorias da marca (com todas as tags do tags.toml, usadas ou não) e as tags de
     pasta e livres que existem no catálogo, cada uma com a contagem de mídias."""
@@ -308,9 +379,14 @@ def _filtros(f: dict) -> tuple[str, list]:
     if f.get("importacao"):
         onde.append("m.importacao_id = ?")
         args.append(int(f["importacao"]))
-    if f.get("subpasta"):
+    if f.get("exata"):
+        # modo "por pasta": só os arquivos que estão direto nesta pasta (as filhas viram cards)
+        onde.append("m.subpasta = ?")
+        args.append((f.get("subpasta") or "").strip(os.sep))
+    elif f.get("subpasta"):
+        sp = f["subpasta"].strip(os.sep)
         onde.append("(m.subpasta = ? or m.subpasta like ?)")
-        args += [f["subpasta"], f["subpasta"] + os.sep + "%"]
+        args += [sp, sp + os.sep + "%"]
     passo = f.get("passo") or ""
     if passo == "fila":
         onde.append(f"m.status_import in ({','.join('?' * len(FILA))})")
@@ -329,9 +405,10 @@ def _filtros(f: dict) -> tuple[str, list]:
         args.append(slug(t))
     busca = (f.get("busca") or "").strip().lower()
     for termo in busca.split():
-        onde.append("(lower(m.caminho) like ? or lower(m.item) like ? or exists (select 1 from midia_tag mt "
-                    "join tag t on t.id = mt.tag_id where mt.midia_id = m.id and (t.slug like ? or lower(t.nome) like ?)))")
-        args += [f"%{termo}%"] * 4
+        onde.append("(lower(m.caminho) like ? or lower(m.item) like ? or lower(m.nome_exibicao) like ? or exists ("
+                    "select 1 from midia_tag mt join tag t on t.id = mt.tag_id where mt.midia_id = m.id "
+                    "and (t.slug like ? or lower(t.nome) like ?)))")
+        args += [f"%{termo}%"] * 5
     return " and ".join(onde), args
 
 
@@ -354,7 +431,9 @@ def listar(filtros: dict | None = None, limite: int = 120, offset: int = 0, db: 
             tags_de.setdefault(r["midia_id"], []).append(
                 {"slug": r["slug"], "nome": r["nome"], "origem": r["origem"], "categoria": r["categoria"], "por": r["por"]})
     con.close()
-    itens = [{"id": r["id"], "fonte": r["fonte_id"], "caminho": r["caminho"], "nome": os.path.basename(r["caminho"]),
+    itens = [{"id": r["id"], "fonte": r["fonte_id"], "caminho": r["caminho"],
+              "nome": r["nome_exibicao"] or os.path.basename(r["caminho"]), "original": os.path.basename(r["caminho"]),
+              "renomeado": bool(r["nome_exibicao"]),
               "item": r["item"], "subpasta": r["subpasta"], "tipo": r["tipo"], "status": r["status_import"],
               "pilar": r["pilar"], "data": r["data"], "mb": round((r["tamanho"] or 0) / 1e6, 1),
               "tags": tags_de.get(r["id"], [])} for r in linhas]
@@ -381,7 +460,7 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
     con = abrir(db)
 
     def contar(sem: str, sql: str, por_linha):
-        g = {k: v for k, v in f.items() if k != sem}
+        g = {k: v for k, v in f.items() if k != sem and not (sem == "subpasta" and k == "exata")}
         onde, args = _filtros(g)
         return [por_linha(r) for r in con.execute(sql.format(onde=onde), args)]
 
@@ -397,14 +476,22 @@ def resumo(filtros: dict | None = None, db: str | None = None) -> dict:
                                 "on i.id = m.importacao_id where {onde} group by i.id order by i.data desc",
                   lambda r: {"id": r[0], "fonte": r[1], "data": r[2], "n": r[3],
                              "quando": time.strftime("%d/%m %H:%M", time.localtime(r[2] or 0))})
+    # pastas: as filhas da pasta aberta (filtros["subpasta"]), cada uma com o total dentro dela
+    aberta = (f.get("subpasta") or "").strip(os.sep)
     subs: dict[str, int] = {}
     for sub, n in contar("subpasta", "select m.subpasta, count(*) from midia m where {onde} and m.subpasta != '' "
                                      "group by m.subpasta", lambda r: (r[0], r[1])):
-        topo = sub.split(os.sep)[0]
+        if aberta:
+            if not sub.startswith(aberta + os.sep):
+                continue
+            resto = sub[len(aberta) + 1:]
+        else:
+            resto = sub
+        topo = resto.split(os.sep)[0]
         subs[topo] = subs.get(topo, 0) + n
     con.close()
     return {"passos": passos, "tipos": tipos, "fontes": fontes_n, "importacoes": imps,
-            "subpastas": [{"nome": k, "n": v} for k, v in sorted(subs.items(), key=lambda x: -x[1])]}
+            "subpastas": [{"nome": k, "n": v} for k, v in sorted(subs.items(), key=lambda x: x[0].lower())]}
 
 
 def main() -> None:

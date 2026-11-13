@@ -19,8 +19,21 @@ pub enum Vista {
     Fila,
 }
 
+/// Como a grade mostra as mídias.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Modo {
+    /// tudo o que passa no filtro, numa grade só (a pasta escolhida inclui as subpastas)
+    #[default]
+    Todos,
+    /// navegar: as subpastas viram cards e a grade mostra só o que está direto na pasta
+    Pasta,
+    /// as tags viram cards; escolher uma mostra as mídias com ela
+    Tags,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct FiltrosMidia {
+    pub modo: Modo,
     /// "" | "video" | "imagem"
     pub tipo: String,
     pub fonte: String,
@@ -62,6 +75,10 @@ pub struct Biblioteca {
     pub fila: VistaMidia,
     pub tags: TagsMarca,
     pub nova_tag: TextEdit,
+    /// renomear um arquivo (nome no catálogo) e o padrão do lote
+    pub nome: TextEdit,
+    pub nome_de: Option<i64>,
+    pub padrao: TextEdit,
     pub sincronizando: bool,
     /// janela "Importar pasta"
     pub janela_importar: bool,
@@ -73,7 +90,8 @@ impl Biblioteca {
     pub fn novo_vazio() -> Biblioteca {
         Biblioteca {
             acervo: VistaMidia::nova(""), fila: VistaMidia::nova("fila"), tags: TagsMarca::default(),
-            nova_tag: TextEdit::new(""), sincronizando: false, janela_importar: false, ver_pastas: false,
+            nova_tag: TextEdit::new(""), nome: TextEdit::new(""), nome_de: None, padrao: TextEdit::new("{pasta}_{n}"),
+            sincronizando: false, janela_importar: false, ver_pastas: false,
         }
     }
 }
@@ -90,7 +108,9 @@ impl App {
         let vm = self.vista(v);
         let f = &vm.filtros;
         json!({"importadas": v == Vista::Fila, "tipo": f.tipo, "fonte": f.fonte, "passo": f.passo,
-               "importacao": f.importacao, "subpasta": f.subpasta, "tags": f.tags, "busca": vm.busca.text.trim()})
+               "importacao": f.importacao, "subpasta": f.subpasta, "tags": f.tags, "busca": vm.busca.text.trim(),
+               // por pasta: só o que está direto na pasta aberta (precisa de uma fonte escolhida)
+               "exata": f.modo == Modo::Pasta && !f.fonte.is_empty()})
     }
 
     pub fn midias_recarregar(&mut self, v: Vista) {
@@ -126,7 +146,53 @@ impl App {
     pub fn midia_alternar(&mut self, v: Vista, id: i64) {
         let s = &mut self.vista_mut(v).selecao;
         if !s.remove(&id) { s.insert(id); }
+        self.preparar_nome(v);
         self.versao += 1;
+    }
+
+    /// Com um selecionado só, o campo de nome começa com o nome atual dele.
+    fn preparar_nome(&mut self, v: Vista) {
+        let vm = self.vista(v);
+        let um = if vm.selecao.len() == 1 { vm.selecao.iter().next().copied() } else { None };
+        if um == self.x.b.nome_de { return; }
+        let nome = um.and_then(|id| vm.itens.iter().find(|m| m.id == id)).map(|m| m.nome.clone()).unwrap_or_default();
+        self.x.b.nome = TextEdit::new(&nome);
+        self.x.b.nome_de = um;
+    }
+
+    /// Os selecionados na ordem da grade (os de outras páginas no fim): é a ordem do {n} no lote.
+    pub fn ids_em_ordem(&self, v: Vista) -> Vec<i64> {
+        let vm = self.vista(v);
+        let mut ids: Vec<i64> = vm.itens.iter().filter(|m| vm.selecao.contains(&m.id)).map(|m| m.id).collect();
+        let vistos: BTreeSet<i64> = ids.iter().copied().collect();
+        ids.extend(vm.selecao.iter().filter(|i| !vistos.contains(i)));
+        ids
+    }
+
+    /// Nome no catálogo: um selecionado recebe o nome digitado; vários, o padrão do lote.
+    /// `original` volta ao nome do arquivo. O arquivo no disco nunca muda.
+    pub fn midia_renomear(&mut self, v: Vista, original: bool) {
+        let ids = self.ids_em_ordem(v);
+        if ids.is_empty() { return; }
+        let padrao = if original { String::new() }
+            else if ids.len() == 1 { self.x.b.nome.text.trim().to_string() }
+            else { self.x.b.padrao.text.trim().to_string() };
+        if !original && padrao.is_empty() { self.aviso = Some("escreva o nome (ou o padrão do lote)".into()); return; }
+        self.x.b.nome_de = None;
+        self.pedir(Pedido::MidiaAcao(v), "midia_renomear", json!({"ids": ids, "padrao": padrao}));
+    }
+
+    pub fn midia_modo(&mut self, v: Vista, modo: Modo) {
+        self.midia_filtro(v, |f| {
+            if f.modo == Modo::Tags || modo == Modo::Tags { f.tags.clear(); }
+            f.modo = modo;
+        });
+    }
+
+    /// Abre uma pasta: "" volta ao topo da fonte; com `fonte` vazia, volta à lista de fontes.
+    pub fn midia_abrir_pasta(&mut self, v: Vista, fonte: &str, pasta: &str) {
+        let (fonte, pasta) = (fonte.to_string(), pasta.to_string());
+        self.midia_filtro(v, move |f| { f.fonte = fonte; f.subpasta = pasta; });
     }
 
     pub fn midia_limpar_selecao(&mut self, v: Vista) {
@@ -214,10 +280,12 @@ impl App {
                 vm.total = r["total"].as_u64().unwrap_or(0) as usize;
                 vm.resumo = serde_json::from_value(r["resumo"].clone()).unwrap_or_default();
                 vm.carregando = false;
+                self.preparar_nome(v);
             }
             Pedido::MidiaIds(v) => {
                 let ids: Vec<i64> = serde_json::from_value(r["ids"].clone()).unwrap_or_default();
                 self.vista_mut(v).selecao = ids.into_iter().collect();
+                self.preparar_nome(v);
             }
             Pedido::MidiaAcao(v) => {
                 self.midias_recarregar(v);

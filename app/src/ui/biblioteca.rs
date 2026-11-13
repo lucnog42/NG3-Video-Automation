@@ -1,11 +1,12 @@
 //! A grade de mídia do mockup (aba Acervo e fila de revisão do Importar): cards com caixa de
-//! seleção, filtros em controles segmentados e o painel de tags à direita.
+//! seleção, filtros em controles segmentados e o painel de tags à direita. Três modos: todos
+//! numa grade, por pasta (navegar em pastas e subpastas) e por tags (as tags viram cards).
 
 use super::comum::{self, botao, etiqueta, pastilha, seg, seg_item};
 use super::tema::{self, Tema};
 use crate::app::App;
 use crate::dados::{Midia, TagConta};
-use crate::midias::{POR_PAGINA, Vista};
+use crate::midias::{Modo, POR_PAGINA, Vista};
 use rune::{Color, Cursor, El, ScrollSpec, col, el, row, spacer, text};
 use rune_kit::TextInput;
 
@@ -16,29 +17,20 @@ const THUMB_H: f32 = 112.0;
 pub fn aba_acervo(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
     let v = Vista::Acervo;
     let vm = s.vista(v);
-    let r = &vm.resumo;
     let busca = TextInput::new(&vm.busca)
         .placeholder("buscar no caminho, na pasta e nas tags")
         .on_edit(|s: &mut App| &mut s.x.b.acervo.busca)
         .on_change(|s: &mut App, _| s.midia_busca(Vista::Acervo))
         .build(k).key("acervo-busca").w(300.0);
 
-    let mut fontes = vec![seg_item("af-todas", "Todas", vm.filtros.fonte.is_empty(), t,
-                                   |s: &mut App| s.midia_filtro(Vista::Acervo, |f| f.fonte.clear()))];
-    for (id, n) in &r.fontes {
-        let nome = s.x.fontes.iter().find(|f| &f.id == id).map(|f| f.nome.clone()).unwrap_or_else(|| id.clone());
-        let id2 = id.clone();
-        fontes.push(seg_item(format!("af-{id}"), format!("{nome} {n}"), vm.filtros.fonte == *id, t,
-                             move |s: &mut App| { let i = id2.clone(); s.midia_filtro(Vista::Acervo, move |f| f.fonte = i) }));
-    }
     let barra = row().w_full().gap(10.0).center_y().flex_wrap()
         .child(busca)
+        .child(seg_modo(s, v, t))
         .child(seg_tipo(s, v, t))
-        .child(seg("seg-fontes", fontes, t))
         .child(spacer())
         .child(seg_passo(s, v, t, &[("", "Todos"), ("fila", "Na fila"), ("sem_tags", "Sem tag"), ("revisado", "Revisados")]))
         .child(botoes_selecao(s, v, t));
-    corpo(s, v, t, k, col().w_full().gap(10.0).child(barra).child(filtro_tags(s, v, t)))
+    corpo(s, v, t, k, col().w_full().gap(10.0).child(barra).child(navegador_pastas(s, v, t)).child(filtro_tags(s, v, t)))
 }
 
 /// Aba Importar, vista "fila de revisão": só as pastas apontadas.
@@ -46,7 +38,14 @@ pub fn fila(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
     let v = Vista::Fila;
     let vm = s.vista(v);
     let r = &vm.resumo;
+    let busca = TextInput::new(&vm.busca)
+        .placeholder("buscar no caminho, na pasta e nas tags")
+        .on_edit(|s: &mut App| &mut s.x.b.fila.busca)
+        .on_change(|s: &mut App, _| s.midia_busca(Vista::Fila))
+        .build(k).key("fila-busca").w(260.0);
     let barra = row().w_full().gap(10.0).center_y().flex_wrap()
+        .child(busca)
+        .child(seg_modo(s, v, t))
         .child(seg_tipo(s, v, t))
         .child(spacer())
         .child(seg_passo(s, v, t, &[("fila", "Fila de revisão"), ("sem_tags", "Sem tag"), ("revisado", "Revisados"), ("", "Todos")]))
@@ -63,18 +62,8 @@ pub fn fila(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                                    move |s: &mut App| s.midia_filtro(Vista::Fila, move |f| {
                                        f.importacao = if f.importacao == Some(id) { None } else { Some(id) } })));
     }
-    let mut subs = row().w_full().gap(6.0).center_y().flex_wrap().child(comum::rotulo("subpastas", t).pr(4.0));
-    for sp in r.subpastas.iter().take(14) {
-        let nome = sp.nome.clone();
-        subs = subs.child(pastilha(format!("sub-{}", sp.nome), format!("/{} {}", sp.nome, sp.n), vm.filtros.subpasta == sp.nome, t,
-                                   move |s: &mut App| { let n = nome.clone(); s.midia_filtro(Vista::Fila, move |f| {
-                                       f.subpasta = if f.subpasta == n { String::new() } else { n } }) }));
-    }
-    if r.subpastas.len() > 14 {
-        subs = subs.child(text(format!("+{} subpastas", r.subpastas.len() - 14)).font(tema::PEQ).color(t.fraco));
-    }
-    subs = subs.child(text("o nome da subpasta vira tag automaticamente").font(tema::PEQ).color(t.fraco).pl(6.0));
-    corpo(s, v, t, k, col().w_full().gap(10.0).child(barra).child(imps).child(subs))
+    corpo(s, v, t, k, col().w_full().gap(10.0).child(barra).child(imps).child(navegador_pastas(s, v, t))
+        .child(filtro_tags(s, v, t)))
 }
 
 /// Filtros em cima, grade e paginador no meio, painel de tags à direita.
@@ -87,8 +76,24 @@ fn corpo(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit, filtros: El) -> El {
     let mut meio = col().key(format!("grade-midia-{v:?}")).grow(1.0).min_w(0.0).h_full().px(22.0).py(16.0).gap(14.0)
         .scroll(ScrollSpec { stick_bottom: false })
         .child(filtros);
-    if vm.itens.is_empty() {
+    let f = &vm.filtros;
+    let cards = match f.modo {
+        Modo::Pasta => Some(cards_pastas(s, v, t)),
+        Modo::Tags if f.tags.is_empty() && f.passo != "sem_tags" => {
+            return row().key(format!("vista-{v:?}")).w_full().grow(1.0).min_h(0.0)
+                .child(meio.child(cards_tags(s, v, t)))
+                .child(painel_tags(s, v, t, k));
+        }
+        _ => None,
+    };
+    let sem_fonte = f.modo == Modo::Pasta && f.fonte.is_empty();
+    if let Some(c) = cards { meio = meio.child(c); }
+    let so_pastas = f.modo == Modo::Pasta && vm.itens.is_empty() && !vm.resumo.subpastas.is_empty();
+    if sem_fonte || so_pastas {
+        // na raiz do modo pasta só aparecem as fontes; numa pasta só de subpastas, só os cards
+    } else if vm.itens.is_empty() {
         let msg = if vm.carregando || s.x.b.sincronizando { "carregando o catálogo…" }
+            else if f.modo == Modo::Pasta { "Nenhum arquivo direto nesta pasta: abra uma subpasta acima." }
             else if v == Vista::Fila && vm.filtros.passo == "fila" { "Nada na fila de revisão. Use \"+ Importar pasta\" para apontar uma pasta nova." }
             else { "Nenhuma mídia com esses filtros." };
         meio = meio.child(text(msg).font(tema::NORMAL).color(t.dim).pt(30.0));
@@ -98,6 +103,138 @@ fn corpo(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit, filtros: El) -> El {
     row().key(format!("vista-{v:?}")).w_full().grow(1.0).min_h(0.0)
         .child(meio)
         .child(painel_tags(s, v, t, k))
+}
+
+fn seg_modo(s: &App, v: Vista, t: Tema) -> El {
+    let modo = s.vista(v).filtros.modo;
+    let item = |id: &'static str, rot: &'static str, m: Modo| seg_item(format!("md-{v:?}-{id}"), rot, modo == m, t,
+                                                                       move |s: &mut App| s.midia_modo(v, m));
+    seg(format!("seg-modo-{v:?}"), vec![item("todos", "Todos", Modo::Todos), item("pasta", "Por pasta", Modo::Pasta),
+                                         item("tags", "Por tags", Modo::Tags)], t)
+}
+
+fn nome_fonte(s: &App, id: &str) -> String {
+    s.x.fontes.iter().find(|f| f.id == id).map(|f| f.nome.clone()).unwrap_or_else(|| id.to_string())
+}
+
+/// "PASTA  Todas › Fonte › Sub › Sub2": cada pedaço volta àquela pasta. No modo Todos, as
+/// subpastas da pasta aberta aparecem como pastilhas (o filtro inclui as subpastas); no modo
+/// Por pasta, viram cards na grade.
+fn navegador_pastas(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let f = &vm.filtros;
+    if f.modo == Modo::Tags { return el(); }
+    let crumb = |chave: String, rot: String, on: bool, fonte: String, pasta: String| -> El {
+        row().key(chave).h(24.0).px(6.0).center_y().radius(5.0).hover(t.card2).cursor(Cursor::Pointer)
+            .child(text(rot).font(if on { tema::PEQ_M } else { tema::PEQ }).color(if on { t.txt } else { t.acento }))
+            .on_press(move |s: &mut App| s.midia_abrir_pasta(v, &fonte, &pasta))
+    };
+    let seta = || text("›").font(tema::PEQ).color(t.fraco);
+    let mut r = row().w_full().gap(4.0).center_y().flex_wrap().child(comum::rotulo("pasta", t).pr(6.0))
+        .child(crumb(format!("cr-{v:?}-raiz"), if v == Vista::Fila { "Todas as pastas".into() } else { "Todas as fontes".into() },
+                     f.fonte.is_empty(), String::new(), String::new()));
+    if !f.fonte.is_empty() {
+        r = r.child(seta()).child(crumb(format!("cr-{v:?}-fonte"), nome_fonte(s, &f.fonte), f.subpasta.is_empty(),
+                                        f.fonte.clone(), String::new()));
+        let mut acc = String::new();
+        let partes: Vec<&str> = f.subpasta.split('/').filter(|p| !p.is_empty()).collect();
+        for (i, p) in partes.iter().enumerate() {
+            if !acc.is_empty() { acc.push('/'); }
+            acc.push_str(p);
+            r = r.child(seta()).child(crumb(format!("cr-{v:?}-{i}"), p.to_string(), i + 1 == partes.len(), f.fonte.clone(), acc.clone()));
+        }
+    }
+    if f.modo == Modo::Todos {
+        r = r.child(el().w(1.0).h(18.0).mx(8.0).fill(t.linha_forte));
+        if f.fonte.is_empty() {
+            for (id, n) in &vm.resumo.fontes {
+                let id2 = id.clone();
+                r = r.child(pastilha(format!("pf-{v:?}-{id}"), format!("{} {n}", nome_fonte(s, id)), false, t,
+                                     move |s: &mut App| s.midia_abrir_pasta(v, &id2, "")));
+            }
+        } else {
+            for sp in vm.resumo.subpastas.iter().take(16) {
+                let alvo = if f.subpasta.is_empty() { sp.nome.clone() } else { format!("{}/{}", f.subpasta, sp.nome) };
+                let fonte = f.fonte.clone();
+                r = r.child(pastilha(format!("ps-{v:?}-{}", sp.nome), format!("/{} {}", sp.nome, sp.n), false, t,
+                                     move |s: &mut App| s.midia_abrir_pasta(v, &fonte, &alvo)));
+            }
+            if vm.resumo.subpastas.len() > 16 {
+                r = r.child(text(format!("+{} (use Por pasta)", vm.resumo.subpastas.len() - 16)).font(tema::PEQ).color(t.fraco));
+            }
+        }
+    }
+    r
+}
+
+/// Um card de pasta ou de tag: nome grande e quantas mídias tem dentro.
+fn card_grupo(chave: String, icone: &str, nome: String, n: usize, t: Tema, f: impl Fn(&mut App) + 'static) -> El {
+    row().key(chave).w(CARD_W).h(64.0).px(12.0).gap(10.0).center_y().radius(8.0).fill(t.card).border(1.0, t.linha)
+        .hover(t.card2).cursor(Cursor::Pointer)
+        .child(el().size(30.0, 30.0).radius(6.0).center().fill(t.acento.alpha(0.14))
+            .child(text(icone.to_string()).font(tema::NORMAL_B).color(t.acento)))
+        .child(col().grow(1.0).min_w(0.0).gap(2.0)
+            .child(text(nome).font(tema::PEQ_M).color(t.txt).truncate().w_full())
+            .child(text(format!("{n} mídia{}", if n == 1 { "" } else { "s" })).font(tema::PEQ).color(t.dim)))
+        .on_press(f)
+}
+
+/// Modo Por pasta: as fontes (na raiz) ou as subpastas da pasta aberta, como cards.
+fn cards_pastas(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let f = &vm.filtros;
+    let mut g = row().w_full().gap(12.0).flex_wrap();
+    if f.fonte.is_empty() {
+        for (id, n) in &vm.resumo.fontes {
+            let id2 = id.clone();
+            g = g.child(card_grupo(format!("cf-{v:?}-{id}"), "▤", nome_fonte(s, id), *n, t,
+                                   move |s: &mut App| s.midia_abrir_pasta(v, &id2, "")));
+        }
+    } else {
+        for sp in &vm.resumo.subpastas {
+            let alvo = if f.subpasta.is_empty() { sp.nome.clone() } else { format!("{}/{}", f.subpasta, sp.nome) };
+            let fonte = f.fonte.clone();
+            g = g.child(card_grupo(format!("cp-{v:?}-{}", sp.nome), "▸", sp.nome.clone(), sp.n, t,
+                                   move |s: &mut App| s.midia_abrir_pasta(v, &fonte, &alvo)));
+        }
+    }
+    g
+}
+
+/// Modo Por tags: cada tag da marca (por categoria), as livres e "sem tag" viram cards.
+fn cards_tags(s: &App, v: Vista, t: Tema) -> El {
+    let vm = s.vista(v);
+    let b = &s.x.b;
+    let abrir = |slug: String| move |s: &mut App| { let x = slug.clone(); s.midia_filtro(v, move |f| f.tags = vec![x]) };
+    let sem = vm.resumo.passos.get("sem_tags").copied().unwrap_or(0);
+    let mut c = col().w_full().gap(16.0)
+        .child(row().w_full().gap(12.0).flex_wrap()
+            .child(card_grupo(format!("ct-{v:?}-sem"), "∅", "Sem tag".into(), sem, t,
+                              move |s: &mut App| s.midia_filtro(v, |f| f.passo = "sem_tags".into()))));
+    let grupo = |titulo: &str, tags: &[TagConta], chave: &str| -> El {
+        let mut g = row().w_full().gap(12.0).flex_wrap();
+        for tg in tags.iter().filter(|x| x.n > 0) {
+            g = g.child(card_grupo(format!("ct-{v:?}-{chave}-{}", tg.slug), "#", tg.nome.clone(), tg.n, t, abrir(tg.slug.clone())));
+        }
+        col().w_full().gap(8.0).child(comum::rotulo(titulo, t)).child(g)
+    };
+    let mut vazias = vec![];
+    for cat in &b.tags.categorias {
+        if cat.tags.iter().any(|x| x.n > 0) {
+            c = c.child(grupo(&cat.nome, &cat.tags, &cat.slug));
+        } else {
+            vazias.push(cat.nome.clone());
+        }
+    }
+    if b.tags.livres.iter().any(|x| x.n > 0) { c = c.child(grupo("livres", &b.tags.livres, "livres")); }
+    if b.tags.pasta.iter().any(|x| x.n > 0) {
+        let top: Vec<TagConta> = b.tags.pasta.iter().take(40).cloned().collect();
+        c = c.child(grupo("das subpastas", &top, "pasta"));
+    }
+    if !vazias.is_empty() {
+        c = c.child(text(format!("Ainda sem mídias: {}.", vazias.join(", "))).font(tema::PEQ).color(t.fraco));
+    }
+    c
 }
 
 fn seg_tipo(s: &App, v: Vista, t: Tema) -> El {
@@ -136,8 +273,15 @@ fn botoes_selecao(s: &App, v: Vista, t: Tema) -> El {
 /// Tags ligadas no filtro (clicar numa tag do painel sem nada selecionado filtra a grade).
 fn filtro_tags(s: &App, v: Vista, t: Tema) -> El {
     let vm = s.vista(v);
-    if vm.filtros.tags.is_empty() { return el(); }
-    let mut r = row().w_full().gap(6.0).center_y().flex_wrap().child(comum::rotulo("com as tags", t).pr(4.0));
+    let dentro_sem_tag = vm.filtros.modo == Modo::Tags && vm.filtros.passo == "sem_tags";
+    if vm.filtros.tags.is_empty() && !dentro_sem_tag { return el(); }
+    let mut r = row().w_full().gap(6.0).center_y().flex_wrap();
+    if vm.filtros.modo == Modo::Tags {
+        r = r.child(botao(format!("volta-tags-{v:?}"), "‹ todas as tags", t.acento, false, t,
+                          move |s: &mut App| s.midia_filtro(v, |f| { f.tags.clear(); if f.passo == "sem_tags" { f.passo.clear() } })));
+        if dentro_sem_tag { r = r.child(text("Sem tag").font(tema::NORMAL_B).color(t.txt)); }
+    }
+    if !vm.filtros.tags.is_empty() { r = r.child(comum::rotulo("com as tags", t).pr(4.0)); }
     for slug in &vm.filtros.tags {
         let s2 = slug.clone();
         r = r.child(pastilha(format!("ft-{slug}"), format!("{} ×", nome_tag(s, slug)), true, t,
@@ -268,6 +412,8 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
         }
     }
 
+    if n > 0 { p = p.child(renomear(s, v, t, k)); }
+
     // estado de uma tag no painel: com seleção, "todos os selecionados (da página) têm"; sem, "está no filtro"
     let ligada = |slug: &str| if n > 0 {
         !carregados.is_empty() && carregados.iter().all(|m| m.tem_tag(slug))
@@ -327,4 +473,64 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
         p = p.child(acoes);
     }
     p
+}
+
+/// Renomear no catálogo (o arquivo no disco não muda): um selecionado recebe um nome; vários,
+/// um padrão com {n}, {nome}, {pasta} e {data}, com a prévia dos primeiros.
+fn renomear(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
+    let vm = s.vista(v);
+    let b = &s.x.b;
+    let n = vm.selecao.len();
+    let mut c = col().w_full().gap(8.0).pt(4.0);
+    if n == 1 {
+        let m = vm.selecionados().next();
+        c = c.child(comum::rotulo("nome no catálogo", t))
+            .child(row().w_full().gap(6.0).center_y()
+                .child(TextInput::new(&b.nome).placeholder("nome novo")
+                    .on_edit(|s: &mut App| &mut s.x.b.nome)
+                    .on_submit(move |s: &mut App, _| s.midia_renomear(v, false))
+                    .build(k).key(format!("nome-{v:?}")).grow(1.0).min_w(0.0))
+                .child(botao(format!("ren-{v:?}"), "renomear", t.acento, false, t, move |s: &mut App| s.midia_renomear(v, false))));
+        if let Some(m) = m && m.renomeado {
+            c = c.child(row().w_full().gap(6.0).center_y()
+                .child(text(format!("arquivo: {}", m.original)).font(tema::PEQ).color(t.fraco).truncate().grow(1.0).min_w(0.0))
+                .child(botao(format!("orig-{v:?}"), "nome original", t.dim, false, t, move |s: &mut App| s.midia_renomear(v, true))));
+        }
+    } else {
+        let ids = s.ids_em_ordem(v);
+        let largura = (ids.len().to_string().len()).max(2);
+        let mut previa = col().w_full().gap(2.0);
+        for (i, id) in ids.iter().take(3).enumerate() {
+            if let Some(m) = vm.itens.iter().find(|m| m.id == *id) {
+                previa = previa.child(row().w_full().gap(6.0)
+                    .child(text(m.original.clone()).font(tema::PEQ).color(t.fraco).truncate().w(120.0))
+                    .child(text("→").font(tema::PEQ).color(t.fraco))
+                    .child(text(formatar(&b.padrao.text, m, i + 1, largura)).font(tema::PEQ_M).color(t.txt).truncate().grow(1.0).min_w(0.0)));
+            }
+        }
+        if ids.len() > 3 { previa = previa.child(text(format!("… e mais {}", ids.len() - 3)).font(tema::PEQ).color(t.fraco)); }
+        c = c.child(comum::rotulo(&format!("renomear {n} em lote"), t))
+            .child(row().w_full().gap(6.0).center_y()
+                .child(TextInput::new(&b.padrao).placeholder("{pasta}_{n}")
+                    .on_edit(|s: &mut App| &mut s.x.b.padrao)
+                    .on_submit(move |s: &mut App, _| s.midia_renomear(v, false))
+                    .build(k).key(format!("padrao-{v:?}")).grow(1.0).min_w(0.0))
+                .child(botao(format!("ren-lote-{v:?}"), "renomear", t.acento, false, t, move |s: &mut App| s.midia_renomear(v, false))))
+            .child(text("{n} número · {nome} nome do arquivo · {pasta} pasta · {data} data").font(tema::PEQ).color(t.fraco).wrap())
+            .child(previa)
+            .child(botao(format!("orig-lote-{v:?}"), "voltar todos ao nome original", t.dim, false, t,
+                         move |s: &mut App| s.midia_renomear(v, true)));
+    }
+    c.child(text("Muda só o nome no painel e na busca; o arquivo no disco continua igual.").font(tema::PEQ).color(t.fraco).wrap())
+}
+
+/// A mesma regra do `biblioteca._formatar` (prévia do lote): sem extensão no padrão, fica a do arquivo.
+fn formatar(padrao: &str, m: &Midia, n: usize, largura: usize) -> String {
+    let (base, ext) = match m.original.rfind('.') { Some(i) => (&m.original[..i], &m.original[i..]), None => (m.original.as_str(), "") };
+    let pasta = m.subpasta.trim_end_matches('/').rsplit('/').next().unwrap_or("");
+    let nome = padrao.trim().replace("{n}", &format!("{n:0largura$}")).replace("{nome}", base)
+        .replace("{pasta}", pasta).replace("{data}", &m.data).replace('/', "-");
+    let nome = nome.split_whitespace().collect::<Vec<_>>().join(" ");
+    let tem_ext = nome.rfind('.').is_some_and(|i| i > 0 && i < nome.len() - 1);
+    if nome.is_empty() || tem_ext { nome } else { format!("{nome}{ext}") }
 }

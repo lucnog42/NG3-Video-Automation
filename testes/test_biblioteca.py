@@ -126,6 +126,55 @@ class Biblioteca(unittest.TestCase):
         self.assertEqual(len(r["importacoes"]), 1)
         self.assertEqual(len(biblioteca.ids({"tipo": "video"}, db=self.db)), 3)
 
+    def test_por_pasta_filhas_e_so_esta_pasta(self):
+        self.sinc()
+        r = biblioteca.resumo({}, db=self.db)
+        self.assertEqual({x["nome"]: x["n"] for x in r["subpastas"]}, {"Treino": 2, "Jogos": 1})
+        r = biblioteca.resumo({"subpasta": "Jogos"}, db=self.db)
+        self.assertEqual({x["nome"]: x["n"] for x in r["subpastas"]}, {"Final": 1})
+        self.assertEqual(self.lista(subpasta="", exata=True)["total"], 1)          # só o solto.mp4 na raiz
+        self.assertEqual(self.lista(subpasta="Jogos", exata=True)["total"], 0)    # o c.mov está em Jogos/Final
+        self.assertEqual(self.lista(subpasta="Jogos/Final", exata=True)["total"], 1)
+        # no modo por pasta (exata) as filhas da pasta aberta continuam aparecendo
+        r = biblioteca.resumo({"subpasta": "Jogos", "exata": True}, db=self.db)
+        self.assertEqual({x["nome"]: x["n"] for x in r["subpastas"]}, {"Final": 1})
+
+    def test_renomear_um_e_em_lote_sem_tocar_no_disco(self):
+        self.sinc()
+        antes = sorted(os.listdir(os.path.join(self.pasta, "Treino")))
+        itens = {i["original"]: i for i in self.lista()["itens"]}
+        biblioteca.renomear([itens["a.mp4"]["id"]], "Chegada no CT", db=self.db)
+        m = next(i for i in self.lista()["itens"] if i["id"] == itens["a.mp4"]["id"])
+        self.assertEqual((m["nome"], m["renomeado"]), ("Chegada no CT.mp4", True))
+        ids = [itens[n]["id"] for n in ("solto.mp4", "c.mov", "b.jpg")]
+        r = biblioteca.renomear(ids, "{pasta}_{n}", inicio=9, db=self.db)
+        self.assertEqual([x["nome"] for x in r], ["_09.mp4", "Final_10.mov", "Treino_11.jpg"])
+        self.assertEqual(self.lista(busca="final_10")["total"], 1)                 # a busca acha o nome novo
+        biblioteca.renomear([itens["a.mp4"]["id"]], "", db=self.db)                # vazio volta ao original
+        m = next(i for i in self.lista()["itens"] if i["id"] == itens["a.mp4"]["id"])
+        self.assertEqual((m["nome"], m["renomeado"]), ("a.mp4", False))
+        self.assertEqual(sorted(os.listdir(os.path.join(self.pasta, "Treino"))), antes)
+
+    def test_imagem_nunca_nasce_revisada(self):
+        self.assertEqual(biblioteca._status_inicial(False, "video"), "revisado")    # vídeo de post/corte
+        self.assertEqual(biblioteca._status_inicial(False, "imagem"), "novo")       # imagem de post
+        self.assertEqual(biblioteca._status_inicial(True, "imagem"), "novo")
+        self.assertEqual(biblioteca._status_inicial(True, "video"), "novo")
+
+    def test_migracao_devolve_imagem_auto_revisada_para_a_fila(self):
+        con = biblioteca.abrir(self.db)
+        con.execute("pragma user_version = 0")
+        con.execute("insert into midia (fonte_id, caminho, tipo, status_import, criado_em, revisado_em) "
+                    "values ('posts', '_posts/x/imagens/01.jpg', 'imagem', 'revisado', 5, 5)")
+        con.execute("insert into midia (fonte_id, caminho, tipo, status_import, criado_em, revisado_em) "
+                    "values ('posts', '_posts/x/imagens/02.jpg', 'imagem', 'revisado', 5, 9)")   # revisada à mão
+        con.commit()
+        con.close()
+        r = {i["original"]: i for i in self.lista()["itens"]}
+        self.assertEqual(r["01.jpg"]["status"], "novo")
+        self.assertEqual(r["02.jpg"]["status"], "revisado")
+        self.assertEqual(r["01.jpg"]["subpasta"], "_posts/x/imagens")
+
 
 if __name__ == "__main__":
     unittest.main()
