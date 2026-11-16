@@ -61,6 +61,12 @@ docs/          pesquisas e decisões
   **Aprovar** cria o projeto do FilmCraft com o primeiro corte (falas na ordem, um cartão no lugar
   de cada fala nova, b-roll do acervo por função; nada gerado) e um momento por parte, onde se
   troca o b-roll, se põe motion ou se gera o que faltar.
+- **Montar projeto da pasta** (plugin `montar-pasta`, `src/projetos/pasta.py`, ação `projeto_pasta`):
+  uma pasta de vídeos e fotos vira um `.fcproj` com o modelo da marca. Transcreve o que falta, tira o
+  silêncio de quem fala (silencecut, J/L entre as falas), vídeo sem fala (torcida, entrada em campo)
+  entra inteiro e sem legenda, e as fotos entram numa faixa "Fotos" por cima do vídeo a partir de
+  quando alguém fala em "foto" (`--gatilho`). Funciona fora do acervo:
+  `python3 src/projetos/pasta.py <pasta> --ordem 01.mp4,03.mp4,02.mp4 --titulo "..." --aplicar`.
 - **Motion com HyperFrames**: em cada momento, "gerar motion" faz a IA escrever uma composição HTML
   e o [HyperFrames](https://github.com/heygen-com/hyperframes) renderiza um MOV com transparência
   (fica em `dados/.../motion/hyperframes/<id>/` para ajustar à mão). "Usar um motion que já existe"

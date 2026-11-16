@@ -289,6 +289,15 @@ mod tests {
     }
 
     #[test]
+    fn montar_pasta_usa_a_pasta_do_item() {
+        let mut p = plugins();
+        p.rodar("montar-pasta", item()).unwrap();
+        let cmds: Vec<String> = p.drenar().into_iter().filter_map(|a| match a { Acao::Processo { cmd, .. } => Some(cmd.join(" ")), _ => None }).collect();
+        // o post do teste não tem `pasta`: só o corte vira comando
+        assert_eq!(cmds, vec!["python3 src/projetos/pasta.py _Cortes/A --aplicar --preset podcast --foto-s 3.00".to_string()]);
+    }
+
+    #[test]
     fn legendar_e_normalizar_montam_o_comando() {
         let mut p = plugins();
         p.rodar("legendar", item()).unwrap();

@@ -717,6 +717,33 @@ def m_gerar(d):
     return _iniciar(cmd, "gerar", fim)
 
 
+def m_projeto_pasta(d):
+    """Projeto do FilmCraft de uma pasta (do acervo ou de uma fonte importada), como tarefa:
+    vídeos só com a fala e J/L, legenda presa à fala, fotos como b-roll (projetos/pasta.py)."""
+    pasta = _abs(str(d.get("pasta") or ""))
+    if not os.path.isdir(pasta):
+        raise ValueError(f"não é pasta: {d.get('pasta')}")
+    cmd = [sys.executable, os.path.join(SRC, "projetos", "pasta.py"), pasta, "--aplicar"]
+    for k in ("nome", "titulo", "subtitulo", "preset"):
+        if d.get(k):
+            cmd += [f"--{k}", str(d[k])]
+    if d.get("ordem"):
+        cmd += ["--ordem", ",".join(str(x) for x in d["ordem"])]
+    if d.get("foto_s"):
+        cmd += ["--foto-s", f"{float(d['foto_s']):.2f}"]
+    for g in d.get("gatilhos") or []:
+        cmd += ["--gatilho", str(g)]
+    for k, flag in (("cortar", "--sem-cortar"), ("fotos", "--sem-fotos"), ("transcrever", "--sem-transcrever")):
+        if d.get(k) is False:
+            cmd.append(flag)
+
+    def fim(_codigo):
+        _CACHE.pop("posts", None)
+        _CACHE.pop("cortes", None)
+        return {"recarregar": True}
+    return _iniciar(cmd, "projeto_pasta", fim)
+
+
 def m_processo(d):
     """Roda um comando da lista permitida na fila (é o que os plugins usam)."""
     cmd = [str(c) for c in d.get("cmd") or []]

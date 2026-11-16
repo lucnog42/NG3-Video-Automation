@@ -697,3 +697,57 @@ def escrever(projeto: dict, caminho: str) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(projeto, fh, ensure_ascii=False, indent=1)
     os.replace(tmp, caminho)
+
+
+# ------------------------------------------------------------------ b-roll
+def adicionar_broll(projeto: dict, imagens: list[tuple[str, dict]], inicio: float, duracao: float,
+                    nome: str = "Fotos") -> int:
+    """Fotos (ou outros planos sem som) numa faixa própria, logo acima do V1, uma atrás da outra
+    a partir de `inicio` (s na timeline), `duracao` s cada, cobrindo o quadro. `imagens` é
+    [(caminho, info do probe)]. Nada passa do fim do vídeo principal: se não couber, a faixa
+    começa antes. Devolve quantas entraram."""
+    if not imagens or duracao <= 0:
+        return 0
+    itens = projeto["project"]["items"]
+    k = _seq(projeto)
+    v1 = next(t for t in k["video_tracks"] if t["id"] == 1)
+    a1 = next((t for t in k["audio_tracks"] if t["id"] == 4), None)
+    # fim do vídeo principal: o último clipe do A1, sem o ending (a última peça, de uma mídia só dela)
+    pecas = sorted((a1 or v1)["items"], key=lambda c: c["start"])
+    if len(pecas) > 1 and pecas[-1]["item"] not in {c["item"] for c in pecas[:-1]}:
+        pecas = pecas[:-1]
+    fim = max((cl["start"] + cl["duration"] for cl in pecas), default=0)
+    total = ticks(duracao) * len(imagens)
+    if total > fim:
+        imagens = imagens[:max(1, fim // ticks(duracao))]
+        total = ticks(duracao) * len(imagens)
+    t0 = max(0, min(ticks(inicio), fim - total))
+
+    usados = _usados(projeto)
+    modelo_item = itens[str(v1["items"][0]["item"])]
+    modelo_cl = v1["items"][0]
+    w = int(k["settings"].get("width") or 1080)
+    h = int(k["settings"].get("height") or 1920)
+    base = next((t for t in k["video_tracks"] if t["id"] != 1), v1)
+    faixa = copy.deepcopy({kk: vv for kk, vv in base.items() if kk != "items"})
+    faixa.update(id=_proximo_id(usados), name=nome, items=[], transitions=[],
+                 locked=False, sync_lock=False)
+    for caminho, info in imagens:
+        iid = _proximo_id(usados)
+        novo = item_midia(modelo_item, caminho, info)
+        novo.update(id=iid, label="Lavender")
+        if "created" in novo:
+            novo["created"] = iid
+        itens[str(iid)] = novo
+        projeto["project"]["root"]["children"].append({"Item": iid})
+        cl = copy.deepcopy(modelo_cl)
+        cl.update(id=_proximo_id(usados), item=iid, name=os.path.basename(caminho), label="Lavender",
+                  start=t0, duration=ticks(duracao), source_in=0, link=None, group=None)
+        vid = info.get("video") or {}
+        preencher_quadro(cl, int(vid.get("width") or 0), int(vid.get("height") or 0), w, h)
+        faixa["items"].append(cl)
+        t0 += ticks(duracao)
+    pos = k["video_tracks"].index(v1)
+    k["video_tracks"].insert(pos + 1, faixa)
+    projeto["project"]["next_id"] = max(usados) + 1
+    return len(faixa["items"])

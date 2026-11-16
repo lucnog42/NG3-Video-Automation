@@ -232,9 +232,12 @@ def gerar_com_modelo(nome: str, pasta: str, videos: list[str], dados_extra: dict
 
 
 def gerar_de_entradas(nome: str, pasta: str, entradas: list[dict], titulo: str, subtitulo: str,
-                      logo: str | None = None, musica: str | None = None, ending: str | None = None) -> tuple[bool, str]:
+                      logo: str | None = None, musica: str | None = None, ending: str | None = None,
+                      broll: dict | None = None) -> tuple[bool, str]:
     """Projeto montado a partir de pedaços em ordem, o mesmo vídeo podendo voltar mais de uma vez
-    (um roteiro). Cada entrada: {video (absoluto), trechos [(ini, fim)], palavras [(a, b, t)]}."""
+    (um roteiro). Cada entrada: {video (absoluto), trechos [(ini, fim)] ou [(ini, fim, img_ini, img_fim)]
+    (J/L do silencecut), palavras [(a, b, t)]}. `broll`: {"imagens": [caminhos], "inicio": s,
+    "duracao": s} entra numa faixa própria por cima do vídeo (modelo.adicionar_broll)."""
     if not os.path.exists(MODELO):
         return False, f"modelo base ausente: {MODELO}"
     if not entradas:
@@ -242,7 +245,8 @@ def gerar_de_entradas(nome: str, pasta: str, entradas: list[dict], titulo: str, 
     lista = []
     for e in entradas:
         dur = MF.seg(MF.probe(e["video"])["duration"])
-        trechos = [(max(0.0, a), min(dur, b)) for a, b in e.get("trechos") or [(0.0, dur)] if min(dur, b) > max(0.0, a)]
+        trechos = [_no_video(t, dur) for t in e.get("trechos") or [(0.0, dur)]]
+        trechos = [t for t in trechos if t[1] > t[0]]
         lista.append({"video": e["video"], "trechos": trechos or [(0.0, dur)], "palavras": e.get("palavras") or [],
                       "duracao": dur})
     fps = fps_do_video(lista[0]["video"])
@@ -254,21 +258,32 @@ def gerar_de_entradas(nome: str, pasta: str, entradas: list[dict], titulo: str, 
     with open(MODELO, encoding="utf-8") as fh:
         template = json.load(fh)
     projeto = MF.construir(template, dados)
+    if broll and broll.get("imagens"):
+        MF.adicionar_broll(projeto, [(c, MF.probe(c)) for c in broll["imagens"]],
+                           float(broll.get("inicio") or 0.0), float(broll.get("duracao") or 3.0))
     os.makedirs(pasta, exist_ok=True)
     alvo = os.path.join(pasta, f"{nome}.fcproj")
     copia = fcproj.guardar_copia(alvo) if os.path.exists(alvo) else None
     MF.escrever(projeto, alvo)
-    r = subprocess.run([FILMCRAFT, "--project", alvo, "inspect"], capture_output=True, text=True, timeout=120)
-    if r.returncode != 0:
+    erro = fcproj.validar(alvo)          # sem o filmcraft-cli nesta máquina, o app confere ao abrir
+    if erro:
         if copia:
             shutil.copy2(copia, alvo)
         else:
             os.unlink(alvo)
-        return False, f"projeto inválido: {(r.stderr or r.stdout).strip()[:220]}"
+        return False, f"projeto inválido: {erro[:220]}"
     with open(os.path.splitext(alvo)[0] + ".trechos.json", "w", encoding="utf-8") as fh:
         json.dump({"videos": [{"video": os.path.relpath(v["video"], BASE) if v["video"].startswith(BASE) else v["video"],
                                "trechos": v["trechos"], "duracao": v["duracao"]} for v in lista]}, fh, ensure_ascii=False)
     return True, ""
+
+
+def _no_video(t, dur: float) -> tuple:
+    """Trecho preso à duração do vídeo; o J/L (imagem deslocada do som) vem junto."""
+    a, b = max(0.0, float(t[0])), min(dur, float(t[1]))
+    if len(t) >= 4:
+        return (a, b, max(0.0, float(t[2])), min(dur, float(t[3])))
+    return (a, b)
 
 
 def trechos_do_silencecut(video: str) -> list[tuple] | None:

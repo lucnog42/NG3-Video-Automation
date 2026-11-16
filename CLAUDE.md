@@ -82,5 +82,6 @@ python3 -m unittest discover -s testes            # testes (rápidos, sem GPU)
 python3 src/acervo/fontes.py                       # lista fontes
 python3 src/plano/roteiros.py ideias "tema"        # roteiros pela CLI
 python3 src/projetos/fcproj.py legendas <p> <v>    # refaz só as legendas do projeto
+python3 src/projetos/pasta.py <pasta> --aplicar     # projeto de uma pasta (vídeos + fotos)
 cd app && cargo check                              # confere o Rust sem build completo
 ```
