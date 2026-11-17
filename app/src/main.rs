@@ -12,6 +12,7 @@ mod extra;
 mod dados;
 mod filtro;
 mod midias;
+mod organizar;
 mod cortes;
 mod player;
 mod plugins;

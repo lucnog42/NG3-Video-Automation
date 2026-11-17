@@ -55,6 +55,16 @@ docs/          pesquisas e decisões
 - **importar**: aponta pastas de qualquer disco (nada é copiado) com um tipo: `falas` (transcritas,
   entram nos roteiros e no b-roll), `broll`, `fotos` ou `referencias` (estilo e montagem de outros,
   nunca usadas como material). Índice e transcrições ficam em `dados/marcas/<marca>/`.
+- **Tags da marca** (dentro de importar): categorias e tags com as contagens de mídias e cortes;
+  criar (também em lote), renomear (o slug fica), mover, fundir e remover. Grava o `tags.toml` da
+  marca com a versão anterior em `dados/.../historico/tags/` (`src/acervo/tags_marca.py`).
+- **Importar tags de arquivos** (painel lateral, com mídias selecionadas): keywords do Lightroom
+  (sidecar `.xmp` e catálogo `.lrcat`, lido numa cópia) e do XMP/IPTC dentro do arquivo viram tags,
+  com prévia antes de gravar. `Categoria|Tag` vira categoria e tag; o mesmo slug vindo de outra
+  origem pode ser agrupado ou mantido separado (`src/acervo/lightroom.py`). Nada é escrito nos arquivos.
+- **Agrupar em projeto**: mídias de uma ou várias pastas viram um grupo; na aba roteiros, escolher o
+  grupo faz as ideias e o roteiro usarem só o conteúdo dele (`src/acervo/grupos.py`). Convive com o
+  "montar projeto da pasta".
 - **roteiros**: a IA propõe ideias e escreve roteiros com as **falas já gravadas** (texto e tempo
   exatos) e, onde faltar, **falas novas** para gravar. Cada parte tem uma função (provar, dar o
   clima, contraste, só a pessoa) e o que mostrar, já com candidatos do acervo. Você aprova ou exclui.

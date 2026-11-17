@@ -95,6 +95,15 @@ pub enum Pedido {
     Cancelar,
     Tags,
     MotionReusar(String),
+    // gerenciador de tags, importar tags de arquivos e grupos (organizar.rs)
+    TagsPainel,
+    TagsAcao,
+    TagsPrevia,
+    TagsImportar,
+    Grupos,
+    GrupoCriar,
+    GrupoAcao,
+    Grupo(i64),
 }
 
 #[derive(Debug)]

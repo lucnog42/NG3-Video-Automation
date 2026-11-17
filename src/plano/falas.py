@@ -120,6 +120,27 @@ def indexar(db: str | None = None) -> int:
     return len(linhas)
 
 
+def de_videos(videos: list[str], fonte: str = "grupo") -> list[dict]:
+    """As frases de uma lista de vídeos, direto dos words.json (sem passar pelo banco): é o que
+    o roteiro de um grupo usa. Mesmo formato e mesmos ids das frases do banco."""
+    from plano import momentos
+    out, vistas = [], set()
+    for v in videos:
+        try:
+            ws = momentos._palavras(v)
+        except Exception:
+            ws = []
+        item = os.path.basename(os.path.dirname(v)) + "/" + os.path.basename(v)
+        for a, b, t in frases_de(ws):
+            if len(t.split()) < 2 or (v, t) in vistas:
+                continue
+            vistas.add((v, t))
+            fid = hashlib.sha1(f"{v}|{a:.2f}".encode()).hexdigest()[:10]
+            out.append({"id": fid, "texto": t, "video": v, "ini": float(a), "fim": float(b), "item": item,
+                        "fonte": fonte, "pilar": "", "data": ""})
+    return out
+
+
 def garantir(db: str | None = None, idade: float = 12 * 3600) -> None:
     """Refaz o banco se ele não existe ou tem mais de 12 h."""
     if os.path.exists(db or caminho_db()):

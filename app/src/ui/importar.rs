@@ -17,13 +17,17 @@ pub fn aba(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
             .child(text("+ Importar pasta").font(tema::PEQ_M).color(tema::tinta_acento()))
             .on_press(|s: &mut App| s.x.b.janela_importar = true))
         .child(seg("seg-importar", vec![
-            seg_item("imp-fila", "Fila de revisão", !b.ver_pastas, t, |s: &mut App| s.x.b.ver_pastas = false),
+            seg_item("imp-fila", "Fila de revisão", !b.ver_pastas && !s.x.o.ver_tags, t,
+                     |s: &mut App| { s.x.b.ver_pastas = false; s.ver_gerenciador(false); }),
+            seg_item("imp-tags", "Tags da marca", s.x.o.ver_tags, t, |s: &mut App| s.ver_gerenciador(true)),
             seg_item("imp-pastas", format!("Pastas apontadas {}", s.x.fontes.len()), b.ver_pastas, t,
-                     |s: &mut App| s.x.b.ver_pastas = true),
+                     |s: &mut App| { s.x.o.ver_tags = false; s.x.b.ver_pastas = true; }),
         ], t))
         .child(spacer())
         .child(text("nada é copiado: as pastas são só apontadas").font(tema::PEQ).color(t.fraco));
-    let corpo = if b.ver_pastas { pastas(s, t) } else { super::biblioteca::fila(s, t, k) };
+    let corpo = if b.ver_pastas { pastas(s, t) }
+        else if s.x.o.ver_tags { super::tags::gerenciador(s, t, k) }
+        else { super::biblioteca::fila(s, t, k) };
     col().key("importar").w_full().grow(1.0).min_h(0.0)
         .on_drop_files(|s: &mut App, arquivos, _| { s.soltar_pasta(arquivos); s.x.b.janela_importar = true; })
         .child(barra)

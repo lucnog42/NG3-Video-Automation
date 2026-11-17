@@ -78,13 +78,42 @@ def _listar_frases(fs: list[dict]) -> str:
 
 
 # ------------------------------------------------------------------ ideias
-def ideias(tema: str = "", n: int = 4) -> list[dict]:
+def _falas_do_grupo(grupo: int) -> list[dict]:
+    from acervo import grupos
+    fs = falas.de_videos(grupos.arquivos(int(grupo), "video"))
+    if not fs:
+        raise RuntimeError("os vídeos deste grupo ainda não têm fala transcrita: transcreva-os (aba Importar → "
+                           "transcrever) ou escreva o roteiro com falas novas")
+    return fs
+
+
+def _ordenar_por_termos(fs: list[dict], termos: list[str]) -> list[dict]:
+    """As frases que têm mais termos primeiro (busca simples, para o conjunto pequeno de um grupo)."""
+    import unicodedata
+
+    def norm(t: str) -> str:
+        return unicodedata.normalize("NFKD", t.lower()).encode("ascii", "ignore").decode()
+    ts = [norm(t) for t in termos if t.strip()]
+    if not ts:
+        return list(fs)
+    return sorted(fs, key=lambda f: -sum(1 for t in ts if t in norm(f["texto"])))
+
+
+def _arq_ideias(grupo: int | None) -> str:
+    return os.path.join(pasta(), f"ideias-grupo-{int(grupo)}.json" if grupo else "ideias.json")
+
+
+def ideias(tema: str = "", n: int = 4, grupo: int | None = None) -> list[dict]:
+    """Propostas de vídeo. Com `grupo`, só com as falas das mídias do grupo."""
     from nucleo import ia
     from plano import momentos
-    falas.garantir()
-    base = falas.buscar(_termos(tema), 50) if tema.strip() else []
-    vistas = {f["id"] for f in base}
-    pool = base + [f for f in falas.amostra(110) if f["id"] not in vistas]
+    if grupo:
+        pool = _ordenar_por_termos(_falas_do_grupo(grupo), _termos(tema))
+    else:
+        falas.garantir()
+        base = falas.buscar(_termos(tema), 50) if tema.strip() else []
+        vistas = {f["id"] for f in base}
+        pool = base + [f for f in falas.amostra(110) if f["id"] not in vistas]
     fmts = "\n".join(f"- {k}: {v.get('nome')} — {v.get('descricao', '')}" for k, v in formatos().items())
     pedido = (f"Formatos possíveis:\n{fmts}\n\n"
               + (f"O usuário quer vídeos sobre: {tema}\n\n" if tema.strip() else "")
@@ -103,25 +132,29 @@ def ideias(tema: str = "", n: int = 4) -> list[dict]:
         out.append({"id": iid, "titulo": str(i["titulo"]).strip(), "formato": fmt,
                     "objetivo": str(i.get("objetivo") or ""), "gancho": str(i.get("gancho") or ""),
                     "por_que": str(i.get("por_que") or ""), "buscas": [str(b) for b in i.get("buscas") or []][:5],
-                    "falas": [str(x) for x in i.get("falas") or []][:12], "tema": tema})
-    _gravar(os.path.join(pasta(), "ideias.json"), {"tema": tema, "criado_em": _agora(), "ideias": out})
+                    "falas": [str(x) for x in i.get("falas") or []][:12], "tema": tema,
+                    "grupo": int(grupo) if grupo else None})
+    os.makedirs(pasta(), exist_ok=True)
+    _gravar(_arq_ideias(grupo), {"tema": tema, "criado_em": _agora(), "ideias": out})
     return out
 
 
-def ler_ideias() -> list[dict]:
+def ler_ideias(grupo: int | None = None) -> list[dict]:
     try:
-        with open(os.path.join(pasta(), "ideias.json"), encoding="utf-8") as fh:
+        with open(_arq_ideias(grupo), encoding="utf-8") as fh:
             return json.load(fh).get("ideias") or []
     except (OSError, ValueError):
         return []
 
 
 # ------------------------------------------------------------------ escrever
-def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "") -> dict:
+def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "", grupo: int | None = None) -> dict:
+    """Escreve o roteiro. Com `grupo`, as falas e a cobertura vêm só das mídias do grupo."""
     from nucleo import ia
     from plano import momentos
-    falas.garantir()
-    idd = next((x for x in ler_ideias() if x["id"] == ideia), None) if ideia else None
+    if not grupo:
+        falas.garantir()
+    idd = next((x for x in ler_ideias(grupo) if x["id"] == ideia), None) if ideia else None
     if idd:
         tema = tema or f"{idd['titulo']}. {idd['objetivo']}"
         formato = formato or idd["formato"]
@@ -130,13 +163,22 @@ def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "
     fmt = fmts.get(formato) or {}
     duracao = int(duracao or fmt.get("duracao") or 45)
     termos = _termos(tema) + [w for b in (idd or {}).get("buscas") or [] for w in _termos(b)]
-    pool = falas.buscar(termos, 70) if termos else []
-    centrais = falas.por_ids((idd or {}).get("falas") or [])
-    vistas = {f["id"] for f in pool}
-    pool = [f for f in centrais.values() if f["id"] not in vistas] + pool
-    if len(pool) < 25:
+    permitidos: set[str] | None = None
+    if grupo:
+        from acervo import grupos
+        do_grupo = _falas_do_grupo(grupo)
+        centrais_ids = set((idd or {}).get("falas") or [])
+        pool = [f for f in do_grupo if f["id"] in centrais_ids] + \
+            [f for f in _ordenar_por_termos(do_grupo, termos) if f["id"] not in centrais_ids]
+        permitidos = {os.path.normpath(a) for a in grupos.arquivos(int(grupo))}
+    else:
+        pool = falas.buscar(termos, 70) if termos else []
+        centrais = falas.por_ids((idd or {}).get("falas") or [])
         vistas = {f["id"] for f in pool}
-        pool += [f for f in falas.amostra(80) if f["id"] not in vistas]
+        pool = [f for f in centrais.values() if f["id"] not in vistas] + pool
+        if len(pool) < 25:
+            vistas = {f["id"] for f in pool}
+            pool += [f for f in falas.amostra(80) if f["id"] not in vistas]
     if not pool:
         raise RuntimeError("o banco de falas está vazio: transcreva vídeos (Legendar ou aba Importar → transcrever)")
     estrutura = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(fmt.get("estrutura") or []))
@@ -155,7 +197,8 @@ def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "
     por_id = {f["id"]: f for f in pool}
     faltando = [str(p.get("id")) for p in r.get("partes") or [] if isinstance(p, dict) and p.get("tipo") == "fala"
                 and str(p.get("id")) not in por_id]
-    por_id.update(falas.por_ids(faltando))
+    if not grupo:
+        por_id.update(falas.por_ids(faltando))
     partes, usadas = [], set()
     fs_validas = funcoes()
     for p in r.get("partes") or []:
@@ -182,7 +225,7 @@ def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "
         raise RuntimeError("a IA não montou nenhuma parte com as falas do banco")
     usados: set[str] = set()
     for p in partes:
-        p["cobertura"] = _cobertura(p)
+        p["cobertura"] = _cobertura(p, permitidos=permitidos)
         # a mesma imagem não cobre duas partes (se houver outra)
         livre = next((c for c in p["cobertura"] if c["arquivo"] not in usados), None) or (p["cobertura"] or [None])[0]
         p["escolhida"] = livre["id"] if livre else ""
@@ -196,19 +239,28 @@ def escrever(tema: str = "", formato: str = "", duracao: int = 0, ideia: str = "
            "tema": tema, "formato": formato, "duracao_alvo": duracao, "ideia": ideia,
            "duracao": round(sum(p["dur"] for p in partes), 1), "status": "sugerido", "criado_em": _agora(),
            "ia": ia.info()["nome"], "partes": partes}
+    if grupo:
+        from acervo import grupos
+        g = grupos.ler(int(grupo))
+        rot["grupo"], rot["grupo_nome"], rot["grupo_ids"] = g["id"], g["nome"], sorted(g["ids"])
     salvar(rot)
     return rot
 
 
-def _cobertura(p: dict, n: int = 4) -> list[dict]:
-    """Candidatos do acervo para o que a parte manda mostrar (nada para "só a pessoa")."""
+def _cobertura(p: dict, n: int = 4, permitidos: set[str] | None = None) -> list[dict]:
+    """Candidatos do acervo para o que a parte manda mostrar (nada para "só a pessoa"). Com
+    `permitidos` (roteiro de um grupo), só arquivos do grupo; se o índice de b-roll não achar
+    nenhum, entram as mídias do grupo cujo nome bate com o que mostrar (fotos primeiro)."""
     if p["funcao"] == "so-a-pessoa" or not p.get("mostrar"):
         return []
     from achar import broll, indice
     termos = broll._termos(p["mostrar"]) or p["mostrar"].split()
     vistos, out, por_item = set(), [], {}
-    for r in indice.buscar(termos, 40):
+    for r in indice.buscar(termos, 80 if permitidos is not None else 40):
         if r["arquivo"] == p.get("video"):
+            continue
+        if permitidos is not None and os.path.normpath(r["arquivo"] if os.path.isabs(r["arquivo"])
+                                                       else momentos_abs(r["arquivo"])) not in permitidos:
             continue
         k = (r["arquivo"], round(float(r["ini"]), 1))
         if k in vistos or por_item.get(r["item"], 0) >= 2:
@@ -222,6 +274,31 @@ def _cobertura(p: dict, n: int = 4) -> list[dict]:
         out.append(c)
         if len(out) >= n:
             break
+    if permitidos is not None and len(out) < n:
+        out += _cobertura_do_grupo(p, termos, permitidos, {c["arquivo"] for c in out}, n - len(out))
+    return out
+
+
+def momentos_abs(rel: str) -> str:
+    from plano import momentos
+    return momentos._abs(rel)
+
+
+def _cobertura_do_grupo(p: dict, termos: list[str], permitidos: set[str], ja: set[str], n: int) -> list[dict]:
+    from achar import broll
+    from acervo import fontes
+    ts = [t.lower() for t in termos]
+    cands = [a for a in sorted(permitidos) if a not in ja and a != os.path.normpath(p.get("video") or "")]
+    cands.sort(key=lambda a: (-sum(1 for t in ts if t in a.lower()),
+                              os.path.splitext(a)[1].lower() in fontes.VIDEO))
+    out = []
+    for a in cands[:n]:
+        tipo = "video" if os.path.splitext(a)[1].lower() in fontes.VIDEO else "imagem"
+        c = {"id": hashlib.sha1(f"{a}|0".encode()).hexdigest()[:10], "fonte": "grupo", "arquivo": a, "tipo": tipo,
+             "ini": 0.0, "fim": 4.0 if tipo == "video" else 0.0, "item": os.path.basename(os.path.dirname(a)),
+             "texto": os.path.basename(a)}
+        c["miniatura"] = broll._miniatura(c)
+        out.append(c)
     return out
 
 
@@ -264,10 +341,22 @@ def listar() -> list[dict]:
         except (OSError, ValueError):
             continue
         out.append({k: r.get(k) for k in ("id", "titulo", "resumo", "formato", "duracao", "duracao_alvo", "status",
-                                          "criado_em", "pasta", "projeto")}
+                                          "criado_em", "pasta", "projeto", "grupo", "grupo_nome")}
                    | {"partes": len(r.get("partes") or []),
-                      "novas": sum(1 for p in r.get("partes") or [] if p.get("tipo") == "nova")})
+                      "novas": sum(1 for p in r.get("partes") or [] if p.get("tipo") == "nova"),
+                      "grupo_mudou": _grupo_mudou(r)})
     return out
+
+
+def _grupo_mudou(r: dict) -> bool:
+    """O grupo do roteiro ganhou ou perdeu mídias depois que ele foi escrito (só aviso)."""
+    if not r.get("grupo") or "grupo_ids" not in r:
+        return False
+    try:
+        from acervo import grupos
+        return sorted(grupos.ler(int(r["grupo"]))["ids"]) != sorted(r["grupo_ids"])
+    except Exception:
+        return False
 
 
 def excluir(rid: str) -> None:
@@ -444,6 +533,7 @@ def main() -> None:
     e_.add_argument("--formato", default="")
     e_.add_argument("--duracao", type=int, default=0)
     e_.add_argument("--ideia", default="")
+    e_.add_argument("--grupo", type=int, default=0)
     a_ = sub.add_parser("aprovar")
     a_.add_argument("id")
     sub.add_parser("listar")
@@ -451,7 +541,7 @@ def main() -> None:
     if a.cmd == "ideias":
         print(json.dumps(ideias(a.tema), ensure_ascii=False, indent=1))
     elif a.cmd == "escrever":
-        print(json.dumps(escrever(a.tema, a.formato, a.duracao, a.ideia), ensure_ascii=False, indent=1))
+        print(json.dumps(escrever(a.tema, a.formato, a.duracao, a.ideia, a.grupo or None), ensure_ascii=False, indent=1))
     elif a.cmd == "aprovar":
         print(json.dumps(aprovar(a.id), ensure_ascii=False, indent=1))
     else:

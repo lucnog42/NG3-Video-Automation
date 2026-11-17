@@ -46,6 +46,8 @@ pub struct Extra {
     pub b: crate::midias::Biblioteca,
     /// aba Cortes (cortes.rs)
     pub c: crate::cortes::CortesUi,
+    /// gerenciador de tags, importar tags de arquivos e grupos (organizar.rs)
+    pub o: crate::organizar::Organizar,
     /// o player embutido (cortes e preview)
     pub player: crate::player::Player,
     /// processos lentos do motor fora da fila de tarefas (ex.: "biblioteca"): (rótulo, feito, total)
@@ -62,7 +64,7 @@ impl Extra {
             roteiros: vec![], ideias: vec![], formatos: vec![], funcoes: vec![], banco: Banco::default(), aberto: None,
             tema: TextEdit::new(""), formato: String::new(), duracao: 0, pensando_ideias: false, escrevendo: false,
             aprovando: false, textos: HashMap::new(), biblioteca: vec![],
-            b: crate::midias::Biblioteca::novo_vazio(), c: crate::cortes::CortesUi::novo(),
+            b: crate::midias::Biblioteca::novo_vazio(), c: crate::cortes::CortesUi::novo(), o: crate::organizar::Organizar::novo(),
             player: crate::player::Player::novo(), progressos: HashMap::new(),
         }
     }
@@ -127,7 +129,7 @@ impl App {
     pub fn roteiro_ideias(&mut self) {
         if !self.claude { self.aviso = Some("sem chave da IA: veja chaves e config".into()); return; }
         self.x.pensando_ideias = true;
-        self.pedir(Pedido::RoteiroIdeias, "roteiro_ideias", json!({"tema": self.x.tema.text.trim()}));
+        self.pedir(Pedido::RoteiroIdeias, "roteiro_ideias", json!({"tema": self.x.tema.text.trim(), "grupo": self.x.o.grupo_ativo}));
     }
 
     pub fn roteiro_escrever(&mut self, ideia: &str) {
@@ -135,7 +137,8 @@ impl App {
         self.x.escrevendo = true;
         self.pedir(Pedido::RoteiroEscrever, "roteiro_escrever",
                    json!({"tema": if ideia.is_empty() { self.x.tema.text.trim().to_string() } else { String::new() },
-                          "formato": self.x.formato, "duracao": self.x.duracao, "ideia": ideia}));
+                          "formato": self.x.formato, "duracao": self.x.duracao, "ideia": ideia,
+                          "grupo": self.x.o.grupo_ativo}));
     }
 
     pub fn roteiro_abrir(&mut self, id: &str) { self.pedir(Pedido::Roteiro(id.into()), "roteiro", json!({"id": id})); }
@@ -248,7 +251,9 @@ impl App {
             }
             Pedido::Roteiros => {
                 self.x.roteiros = serde_json::from_value(r["roteiros"].clone()).unwrap_or_default();
-                self.x.ideias = serde_json::from_value(r["ideias"].clone()).unwrap_or_default();
+                if self.x.o.grupo_ativo.is_none() {
+                    self.x.ideias = serde_json::from_value(r["ideias"].clone()).unwrap_or_default();
+                }
                 self.x.formatos = serde_json::from_value(r["formatos"].clone()).unwrap_or_default();
                 self.x.funcoes = serde_json::from_value(r["funcoes"].clone()).unwrap_or_default();
                 self.x.banco = serde_json::from_value(r["banco"].clone()).unwrap_or_default();
@@ -323,11 +328,16 @@ impl App {
     pub fn ao_entrar(&mut self, aba: Aba) {
         self.x.player.parar();             // trocar de aba para o vídeo que estava tocando
         match aba {
-            Aba::Roteiros => self.roteiros_recarregar(),
+            Aba::Roteiros => {
+                self.roteiros_recarregar();
+                self.grupos_recarregar();
+                if let Some(g) = self.x.o.grupo_ativo { self.pedir(Pedido::Grupo(g), "grupo", json!({"id": g})); }
+            }
             Aba::Importar => {
                 self.x.contagens.clear();
                 self.fontes_recarregar();
                 self.midias_ao_entrar(crate::midias::Vista::Fila);
+                if self.x.o.ver_tags { self.tags_painel_recarregar(); }
             }
             Aba::Cortes => {
                 if self.x.fontes.is_empty() { self.fontes_recarregar(); }

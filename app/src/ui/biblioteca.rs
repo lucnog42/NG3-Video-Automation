@@ -439,7 +439,8 @@ fn painel_tags(s: &App, v: Vista, t: Tema, k: &rune_kit::Kit) -> El {
     }
 
     if n > 0 {
-        p = p.child(sugestoes_ia(s, v, t)).child(metadados(s, v, t)).child(renomear(s, v, t, k)).child(transcrever(s, v, t));
+        p = p.child(organizar(v, t))
+            .child(sugestoes_ia(s, v, t)).child(metadados(s, v, t)).child(renomear(s, v, t, k)).child(transcrever(s, v, t));
     }
 
     // estado de uma tag no painel: com seleção, "todos os selecionados (da página) têm"; sem, "está no filtro"
@@ -598,6 +599,19 @@ fn transcrever(s: &App, v: Vista, t: Tema) -> El {
                 .on_press(move |s: &mut App| s.midia_transcrever(v))))
         .child(text("\"Se houver\" mede a música nas pausas da fala e só separa quando ela aparece. A tarefa roda \
                      um vídeo por vez na GPU e aparece em tarefas; pode fechar o painel, que ela continua.").font(tema::PEQ).color(t.fraco).wrap())
+}
+
+/// Lightroom e metadados (janela com prévia) e agrupar os selecionados num projeto.
+fn organizar(v: Vista, t: Tema) -> El {
+    col().w_full().gap(6.0).pt(4.0).child(comum::rotulo("lightroom, metadados e grupos", t))
+        .child(text("Keywords do Lightroom (.xmp e .lrcat) e dos metadados viram tags, com prévia antes de gravar. \
+                     Agrupar junta os selecionados (de uma ou várias pastas) num projeto com roteiro próprio.")
+            .font(tema::PEQ.lh(16.0)).color(t.fraco).wrap())
+        .child(row().w_full().gap(6.0)
+            .child(botao(format!("imp-tags-{v:?}"), "importar tags de arquivos", t.rep, false, t,
+                         move |s: &mut App| s.importar_tags_abrir(v)))
+            .child(botao(format!("agrupar-{v:?}"), "agrupar em projeto", t.acento, false, t,
+                         move |s: &mut App| s.grupo_abrir_janela(v))))
 }
 
 /// As sugestões da IA de imagem nos selecionados (somadas), com aceitar/recusar por tag ou todas,

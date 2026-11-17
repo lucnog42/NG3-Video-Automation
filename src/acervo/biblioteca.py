@@ -76,6 +76,12 @@ create table if not exists midia_emb (midia_id integer primary key, modelo text,
 create table if not exists midia_tag (
     midia_id integer not null, tag_id integer not null, por text not null,
     primary key (midia_id, tag_id));
+create table if not exists midia_texto (midia_id integer not null, campo text not null, texto text,
+    origem text not null, primary key (midia_id, campo, origem));
+create table if not exists grupo (
+    id integer primary key, nome text not null, criado_em real, projeto_id text default '', nota text default '');
+create table if not exists grupo_midia (grupo_id integer not null, midia_id integer not null,
+    primary key (grupo_id, midia_id));
 """
 
 
@@ -453,6 +459,16 @@ def tags(db: str | None = None) -> dict:
               for s, nome in (c.get("tags") or {}).items()]
         cats.append({"slug": cs, "nome": c.get("nome") or cs, "multipla": bool(c.get("multipla", True)), "tags": ts})
     marca = {t["slug"] for c in cats for t in c["tags"]}
+    # tags do catálogo com categoria (vindas do Lightroom ou movidas no gerenciador) entram nela
+    por_cat = {c["slug"]: c for c in cats}
+    for s, v in conta.items():
+        if s in marca or not v[3]:
+            continue
+        if v[3] not in por_cat:
+            por_cat[v[3]] = {"slug": v[3], "nome": v[3].replace("-", " ").capitalize(), "multipla": True, "tags": []}
+            cats.append(por_cat[v[3]])
+        por_cat[v[3]]["tags"].append({"slug": s, "nome": v[2], "n": v[0], "origem": v[1]})
+        marca.add(s)
     soltas = [{"slug": s, "nome": v[2], "n": v[0], "origem": v[1]} for s, v in conta.items() if s not in marca]
     soltas.sort(key=lambda t: (-t["n"], t["nome"].lower()))
     return {"categorias": cats,
@@ -501,6 +517,9 @@ def _filtros(f: dict) -> tuple[str, list]:
     elif passo == "sem_tags":
         onde.append("not exists (select 1 from midia_tag mt join tag t on t.id = mt.tag_id "
                     "where mt.midia_id = m.id and t.origem != 'pasta')")
+    if f.get("grupo"):
+        onde.append("exists (select 1 from grupo_midia g where g.midia_id = m.id and g.grupo_id = ?)")
+        args.append(int(f["grupo"]))
     for t in f.get("tags") or []:
         onde.append("exists (select 1 from midia_tag mt join tag t on t.id = mt.tag_id "
                     "where mt.midia_id = m.id and t.slug = ?)")
@@ -509,8 +528,9 @@ def _filtros(f: dict) -> tuple[str, list]:
     for termo in busca.split():
         onde.append("(lower(m.caminho) like ? or lower(m.item) like ? or lower(m.nome_exibicao) like ? or exists ("
                     "select 1 from midia_tag mt join tag t on t.id = mt.tag_id where mt.midia_id = m.id "
-                    "and (t.slug like ? or lower(t.nome) like ?)))")
-        args += [f"%{termo}%"] * 5
+                    "and (t.slug like ? or lower(t.nome) like ?)) or exists ("
+                    "select 1 from midia_texto x where x.midia_id = m.id and lower(x.texto) like ?))")
+        args += [f"%{termo}%"] * 6
     return " and ".join(onde), args
 
 

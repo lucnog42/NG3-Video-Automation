@@ -10,6 +10,7 @@ mod lista;
 mod plugins;
 mod preview;
 mod roteiros;
+mod tags;
 pub mod tema;
 pub use grade::GAP;
 
@@ -65,6 +66,12 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     if s.x.b.janela_importar {
         camadas.push(importar::janela(s, t, &k));
+    }
+    if s.x.o.janela_tags.is_some() {
+        camadas.push(tags::janela_importar_tags(s, t, &k));
+    }
+    if s.x.o.janela_grupo.is_some() {
+        camadas.push(tags::janela_grupo(s, t, &k));
     }
     if s.chave_aberta {
         camadas.push(painel_chave(s, t, &k));

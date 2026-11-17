@@ -199,7 +199,7 @@ def _sincronizar_biblioteca(so: str | None = None) -> bool:
 def _filtros_midia(d: dict) -> dict:
     f = d.get("filtros") or {}
     return {k: f[k] for k in ("importadas", "fonte", "tipo", "importacao", "subpasta", "exata", "passo", "tags", "busca",
-                              "ordem", "transcricao") if f.get(k) not in (None, "", [], False)}
+                              "ordem", "transcricao", "grupo") if f.get(k) not in (None, "", [], False)}
 
 
 def m_midias(d):
@@ -402,6 +402,134 @@ def m_tags(_):
     return biblioteca.tags()
 
 
+# ------------------------------------------------------------------ gerenciador de tags (aba Importar)
+def m_tags_painel(_):
+    """Categorias (da marca e as que vieram do Lightroom) com tags e contagens; tags sem categoria."""
+    from acervo import tags_marca
+    return tags_marca.painel()
+
+
+def m_tags_categoria(d):
+    """acao: criar (nome, multipla) | renomear (slug, nome) | remover (slug: as tags ficam sem categoria)."""
+    from acervo import tags_marca
+    acao = str(d.get("acao") or "")
+    if acao == "criar":
+        r = {"slug": tags_marca.criar_categoria(str(d.get("nome") or ""), bool(d.get("multipla", True)))}
+    elif acao == "renomear":
+        tags_marca.renomear_categoria(str(d["slug"]), str(d.get("nome") or ""))
+        r = {"slug": d["slug"]}
+    elif acao == "remover":
+        r = {"tags": tags_marca.remover_categoria(str(d["slug"]))}
+    else:
+        raise ValueError("acao: criar, renomear ou remover")
+    return {**r, "painel": tags_marca.painel()}
+
+
+def m_tags_criar(d):
+    """Cria em lote: uma por linha, `Categoria: Nome`, `slug = Nome` ou só o nome."""
+    from acervo import tags_marca
+    criadas = tags_marca.criar_tags(str(d.get("texto") or ""), str(d.get("categoria") or ""))
+    if not criadas:
+        raise ValueError("nenhuma tag no texto")
+    return {"criadas": criadas, "painel": tags_marca.painel()}
+
+
+def m_tag_editar(d):
+    """acao: renomear (nome) | mover (categoria; vazio = sem categoria) | remover (destino apagar|fundir, em)."""
+    from acervo import tags_marca
+    s, acao = str(d.get("slug") or ""), str(d.get("acao") or "")
+    if not s:
+        raise ValueError("escolha uma tag")
+    r = {}
+    if acao == "renomear":
+        tags_marca.renomear_tag(s, str(d.get("nome") or ""))
+    elif acao == "mover":
+        tags_marca.mover_tag(s, str(d.get("categoria") or ""))
+    elif acao == "remover":
+        r["marcacoes"] = tags_marca.remover_tag(s, str(d.get("destino") or "apagar"), str(d.get("em") or ""))
+    else:
+        raise ValueError("acao: renomear, mover ou remover")
+    return {**r, "painel": tags_marca.painel()}
+
+
+def _ids_ou_filtros(d) -> list[int]:
+    from acervo import biblioteca
+    ids = [int(i) for i in d.get("ids") or []]
+    if not ids and d.get("filtros"):
+        ids = biblioteca.ids(_filtros_midia(d))
+    if not ids:
+        raise ValueError("nenhuma mídia selecionada")
+    return ids
+
+
+def _fontes_tags(d) -> dict:
+    lrcat = str(d.get("lrcat") or "").strip()
+    if lrcat:
+        lrcat = os.path.expanduser(lrcat)
+        if not lrcat.lower().endswith(".lrcat") or not os.path.isfile(lrcat):
+            raise ValueError("escolha um catálogo .lrcat do Lightroom que exista")
+    return {"xmp": d.get("xmp", True) is not False, "embutidos": d.get("embutidos", True) is not False, "lrcat": lrcat}
+
+
+def m_tags_importar_previa(d):
+    """Prévia do que viria do Lightroom (.xmp, .lrcat) e dos metadados, sem gravar nada."""
+    from acervo import lightroom
+    return lightroom.previa(_ids_ou_filtros(d), _fontes_tags(d), bool(d.get("estrelas")))
+
+
+def m_tags_importar(d):
+    """Grava a prévia. `escolhas`: {slug: agrupar|separar} nos conflitos; `ignorar`: slugs desmarcados."""
+    from acervo import lightroom
+    escolhas = {str(k): str(v) for k, v in (d.get("escolhas") or {}).items() if v in ("agrupar", "separar")}
+    return lightroom.aplicar(_ids_ou_filtros(d), _fontes_tags(d), bool(d.get("estrelas")), escolhas,
+                             [str(x) for x in d.get("ignorar") or []])
+
+
+# ------------------------------------------------------------------ grupos (viram projeto)
+def m_grupos(_):
+    from acervo import grupos
+    return {"grupos": grupos.listar()}
+
+
+def m_grupo(d):
+    """Um grupo com os roteiros e as ideias dele."""
+    from acervo import grupos
+    from plano import roteiros
+    g = grupos.ler(int(d["id"]))
+    g["roteiros"] = [r for r in roteiros.listar() if r.get("grupo") == g["id"]] if os.path.isdir(roteiros.pasta()) else []
+    g["ideias"] = roteiros.ler_ideias(g["id"])
+    return g
+
+
+def m_grupo_criar(d):
+    """De uma seleção (ids, pode misturar pastas) e/ou de uma subpasta inteira (subpasta, fonte)."""
+    from acervo import grupos
+    g = grupos.criar(str(d.get("nome") or ""), [int(i) for i in d.get("ids") or []],
+                     str(d.get("subpasta") or ""), str(d.get("fonte") or ""))
+    emitir({"evento": "grupos_atualizados"})
+    return g
+
+
+def m_grupo_editar(d):
+    """acao: adicionar (ids) | tirar (ids) | renomear (nome, nota) | apagar."""
+    from acervo import grupos
+    gid, acao = int(d["id"]), str(d.get("acao") or "")
+    ids = [int(i) for i in d.get("ids") or []]
+    if acao == "adicionar":
+        r = {"n": grupos.adicionar(gid, ids)}
+    elif acao == "tirar":
+        r = {"n": grupos.tirar(gid, ids)}
+    elif acao == "renomear":
+        r = grupos.renomear(gid, str(d.get("nome") or ""), d.get("nota"))
+    elif acao == "apagar":
+        grupos.apagar(gid)
+        r = {"apagado": gid}
+    else:
+        raise ValueError("acao: adicionar, tirar, renomear ou apagar")
+    emitir({"evento": "grupos_atualizados"})
+    return r
+
+
 # ------------------------------------------------------------------ roteiros
 _BANCO = {"montando": False}
 
@@ -436,14 +564,18 @@ def m_roteiros(_):
 
 
 def m_roteiro_ideias(d):
+    """Ideias de vídeo; com `grupo`, só com as falas das mídias do grupo."""
     from plano import roteiros
-    return roteiros.ideias(str(d.get("tema") or ""), int(d.get("n") or 4))
+    return roteiros.ideias(str(d.get("tema") or ""), int(d.get("n") or 4), int(d["grupo"]) if d.get("grupo") else None)
 
 
 def m_roteiro_escrever(d):
     from plano import roteiros
-    return roteiros.escrever(str(d.get("tema") or ""), str(d.get("formato") or ""), int(d.get("duracao") or 0),
-                             str(d.get("ideia") or ""))
+    r = roteiros.escrever(str(d.get("tema") or ""), str(d.get("formato") or ""), int(d.get("duracao") or 0),
+                          str(d.get("ideia") or ""), int(d["grupo"]) if d.get("grupo") else None)
+    if d.get("grupo"):
+        emitir({"evento": "grupos_atualizados"})
+    return r
 
 
 def m_roteiro(d):

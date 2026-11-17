@@ -43,7 +43,9 @@ fn lado(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                 .font(tema::PEQ).color(if x.banco.frases == 0 { t.alerta } else { t.dim }).wrap().grow(1.0).min_w(0.0))
             .child(botao("rot-banco", if x.banco.montando { "atualizando…" } else { "atualizar" }, t.dim, x.banco.montando, t,
                          |s: &mut App| { if !s.x.banco.montando { s.banco_atualizar() } })))
-        .child(TextInput::new(&x.tema).placeholder("tema ou pedido (ex.: convite para a avaliação de 2027)")
+        .child(grupos(s, t))
+        .child(TextInput::new(&x.tema).placeholder(if x.o.grupo_ativo.is_some() { "tema do vídeo com o conteúdo deste grupo (opcional)" }
+                                                    else { "tema ou pedido (ex.: convite para a avaliação de 2027)" })
             .on_edit(|s: &mut App| &mut s.x.tema).build(k).key("rot-tema").w_full());
     let mut fmts = row().w_full().gap(6.0).flex_wrap();
     for f in &x.formatos {
@@ -82,11 +84,15 @@ fn lado(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
                                  move |s: &mut App| { if !s.x.escrevendo { s.roteiro_escrever(&id) } }))));
         }
     }
-    c = c.child(text("ROTEIROS").font(tema::MINI).color(t.dim));
-    if x.roteiros.is_empty() {
+    c = c.child(text(match x.o.grupo_ativo.and_then(|g| x.o.grupo(g)) {
+        Some(g) => format!("ROTEIROS DO GRUPO {}", g.nome.to_uppercase()),
+        None => "ROTEIROS".to_string(),
+    }).font(tema::MINI).color(t.dim));
+    let visiveis: Vec<_> = x.roteiros.iter().filter(|r| x.o.grupo_ativo.is_none() || r.grupo == x.o.grupo_ativo).collect();
+    if visiveis.is_empty() {
         c = c.child(text("nenhum ainda").font(tema::PEQ).color(t.dim));
     }
-    for r in &x.roteiros {
+    for r in visiveis {
         let id = r.id.clone();
         let on = x.aberto.as_ref().is_some_and(|a| a.id == r.id);
         let cor = match r.status.as_str() { "aprovado" => t.acento, _ => t.alerta };
@@ -95,11 +101,45 @@ fn lado(s: &App, t: Tema, k: &rune_kit::Kit) -> El {
             .cursor(Cursor::Pointer).hover(t.linha_forte.alpha(0.2))
             .child(row().w_full().gap(6.0).center_y()
                 .child(text(r.titulo.clone()).font(tema::NORMAL_M).color(t.txt).truncate().grow(1.0).min_w(0.0))
+                .child(match &r.grupo_nome { Some(g) => etiqueta(format!("grupo {g}"), t.rep), None => el() })
+                .child(if r.grupo_mudou { etiqueta("o grupo mudou", t.alerta) } else { el() })
                 .child(etiqueta(r.status.clone(), cor)))
             .child(text(format!("{} · {} · {} partes{}", r.formato, mmss(r.duracao), r.partes,
                                 if r.novas > 0 { format!(" ({} fala(s) nova(s))", r.novas) } else { String::new() }))
                 .font(tema::PEQ).color(t.dim))
             .on_press(move |s: &mut App| s.roteiro_abrir(&id)));
+    }
+    c
+}
+
+/// Os grupos (mídias de uma ou várias pastas que viraram projeto): escolher um faz as ideias e o
+/// roteiro usarem só o conteúdo dele.
+fn grupos(s: &App, t: Tema) -> El {
+    let o = &s.x.o;
+    if o.grupos.is_empty() {
+        return text("Grupos: selecione mídias no Acervo ou na fila do Importar e use \"agrupar em projeto\" para ter um \
+                     roteiro só com aquele conteúdo.").font(tema::PEQ.lh(16.0)).color(t.fraco).wrap();
+    }
+    let mut c = col().key("rot-grupos").w_full().gap(6.0)
+        .child(row().w_full().gap(8.0).center_y()
+            .child(text("PROJETOS DE GRUPO").font(tema::MINI).color(t.dim))
+            .child(spacer())
+            .child(if o.grupo_ativo.is_some() {
+                botao("rot-grupo-todos", "usar todo o acervo", t.dim, false, t, |s: &mut App| s.grupo_ativar(None))
+            } else { el() }));
+    for g in &o.grupos {
+        let (id1, id2) = (g.id, g.id);
+        let on = o.grupo_ativo == Some(g.id);
+        c = c.child(col().key(format!("grupo-{}", g.id)).w_full().gap(3.0).padding(8.0).radius(7.0)
+            .fill(if on { t.rep.alpha(0.10) } else { t.card }).border(1.0, if on { t.rep } else { t.linha })
+            .cursor(Cursor::Pointer).hover(t.linha_forte.alpha(0.2))
+            .child(row().w_full().gap(6.0).center_y()
+                .child(text(g.nome.clone()).font(tema::NORMAL_M).color(t.txt).truncate().grow(1.0).min_w(0.0))
+                .child(if on { etiqueta("roteiro com este grupo", t.rep) } else { el() })
+                .child(botao(format!("grupo-rm-{}", g.id), "×", t.erro, false, t, move |s: &mut App| s.grupo_apagar(id2))))
+            .child(text(format!("{} vídeo(s) · {} imagem(ns) · {}", g.videos, g.imagens, g.pastas.join(", ")))
+                .font(tema::PEQ).color(t.dim).truncate())
+            .on_press(move |s: &mut App| s.grupo_ativar(Some(id1))));
     }
     c
 }

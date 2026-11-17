@@ -1373,6 +1373,7 @@ impl App {
                     if v["evento"] == "posts_atualizados" && v["lista"] == "roteiros" {
                         self.pedir(Pedido::Roteiros, "roteiros", json!({}));
                     }
+                    if v["evento"] == "grupos_atualizados" { self.grupos_recarregar(); }
                     if v["evento"] == "biblioteca_atualizada" { self.x.progressos.remove("biblioteca"); self.biblioteca_atualizada(&v); }
                     if v["evento"] == "progresso" {
                         let chave = v["chave"].as_str().unwrap_or("").to_string();
@@ -1406,6 +1407,8 @@ impl App {
                     }
                     p @ (Pedido::RoteiroIdeias | Pedido::RoteiroEscrever | Pedido::RoteiroAprovar(_)
                          | Pedido::CriarMarca | Pedido::FonteAcao(_)) => self.erro_extra(p, erro),
+                    p @ (Pedido::TagsPrevia | Pedido::TagsImportar | Pedido::TagsAcao | Pedido::GrupoCriar
+                         | Pedido::GrupoAcao | Pedido::Grupo(_) | Pedido::TagsPainel | Pedido::Grupos) => self.erro_organizar(p, erro),
                     Pedido::PromptIa(chave) | Pedido::Abordagens(chave) => {
                         if let Some(m) = self.motion.as_mut() { m.pensando.remove(&chave); }
                         self.aviso = Some(format!("a IA não respondeu: {erro}"));
@@ -1576,6 +1579,8 @@ impl App {
                  | Pedido::MidiaTranscrever(_) | Pedido::MidiaReconhecer(_) | Pedido::Tags) => self.resposta_midias(p, r),
             p @ (Pedido::CortesDe(_) | Pedido::CortesSelecionados | Pedido::CortesContagem | Pedido::CorteTira(_)
                  | Pedido::CorteQuadros(_) | Pedido::CortePropor(_) | Pedido::CorteAcao) => self.resposta_cortes(p, r),
+            p @ (Pedido::TagsPainel | Pedido::TagsAcao | Pedido::TagsPrevia | Pedido::TagsImportar | Pedido::Grupos
+                 | Pedido::GrupoCriar | Pedido::GrupoAcao | Pedido::Grupo(_)) => self.resposta_organizar(p, r),
             Pedido::ModeloAplicar(chave) => {
                 let txt = r["texto"].as_str().unwrap_or("").to_string();
                 if let Some((id, alvo)) = chave.split_once('#') {

@@ -431,6 +431,14 @@ pub struct RoteiroResumo {
     pub partes: usize,
     #[serde(default)]
     pub novas: usize,
+    /// roteiro de um grupo (só com o conteúdo dele)
+    #[serde(default)]
+    pub grupo: Option<i64>,
+    #[serde(default)]
+    pub grupo_nome: Option<String>,
+    /// o grupo ganhou ou perdeu mídias depois que o roteiro foi escrito
+    #[serde(default)]
+    pub grupo_mudou: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
