@@ -37,7 +37,7 @@ Ordem de trabalho (cada uma num branch, com commit antes):
 | 4 | `fase/roteiros-abertos` | 2, 3 | roteiro editável por humano, versões, aprovar com opções |
 | 5 | `fase/filmcraft-sync` | 4 | ler o `.fcproj` de volta, sincronia com confirmação, editor do projeto |
 
-Propostas depois da 4, **ainda sem aprovação**: `fase/broll-motion` (busca de b-roll e motion
+Propostas depois da 4, **aprovadas em 2026-11-17**: `fase/broll-motion` (busca de b-roll e motion
 no painel), `fase/sfx` (biblioteca e sugestão de SFX) e `fase/edicao` (recursos de edição).
 Detalhes em `claude/spec-list.md`.
 
@@ -128,7 +128,9 @@ mostra a **prévia do mapeamento** e só grava depois de confirmar. Arquivos `.x
 
 Tag que já existe na marca é reaproveitada pelo slug; tag nova aparece como "nova" na prévia e
 entra sem categoria quando o arquivo não traz hierarquia. Vale para imagens e, quando houver
-metadados, para vídeos. Leitor dos metadados: a decidir (ver perguntas).
+metadados, para vídeos. Leitor dos metadados (decidido em 2026-11-17): o `acervo/reconhecer.py`,
+que já lê os metadados das mídias, se der conta de tudo isto (keywords, hierarquia, `.xmp`,
+`.lrcat`); se não der, ExifTool por subprocess.
 
 Decidido em 2026-11-17:
 
@@ -156,7 +158,8 @@ projeto**. Estende o "montar projeto de uma pasta" (`src/projetos/pasta.py`).
 
 ### Gerenciador de tags da marca
 
-Um menu próprio ("tags da marca", `ui/tags.rs`), separado da fila de import:
+Um menu próprio ("tags da marca") **dentro da aba Importar** (decidido em 2026-11-17), ao lado
+da fila de revisão:
 
 - Lista de **categorias** com a contagem de entradas (mídias + cortes) em cada uma, e dentro
   dela as tags com a contagem e a **origem** de cada tag. Lista à parte das tags sem categoria.
@@ -232,11 +235,14 @@ Hoje a ida é boa (`gerar`, `fcproj.ganho/legendas`), mas não há volta.
 4. **Abrir no FilmCraft** a partir do painel, no tempo da parte (se o CLI aceitar `--seek`;
    senão só abrir o projeto).
 5. Detectar edição externa por `mtime` + hash do `.fcproj`; mostrar no card do projeto.
+   **Legendas seguem a edição** (decidido em 2026-11-17): quando o projeto é salvo com
+   cortes, posições ou ordem alterados, as legendas são refeitas em cima das novas posições,
+   pelos tempos das palavras de cada trecho (`fcproj.legendas`), sem mexer no resto.
 6. **Editor do projeto** (`ui/projeto.rs`): roteiro à esquerda, player e timeline de seis faixas
    (vídeo principal, b-roll, motion, legenda, texto na tela, SFX) no centro, recomendações do
    momento à direita (b-roll, motion, SFX).
 
-**A investigar primeiro:** que campos do clipe o FilmCraft preserva ao salvar (para o marcador
+**A investigar primeiro (técnico, sem decisão do Lucas):** que campos do clipe o FilmCraft preserva ao salvar (para o marcador
 `parte_id`) e o que o `filmcraft-cli` oferece além de `probe` e `inspect`.
 
 ---
@@ -249,5 +255,9 @@ A lista completa (12 perguntas) está em `claude/spec-list.md`. As principais:
 - Cortes por fala: agrupar por pausa ou outro critério? (começar por pausa)
 - O stem de música deve ser guardado ou descartado depois da transcrição? (padrão: descartar)
 - Um grupo pode ter mais de um roteiro ao mesmo tempo, ou cada grupo é sempre um projeto só?
-- Qual leitor de IPTC/XMP/EXIF (por exemplo `exiftool`) e quais formatos de vídeo trazem
-  metadados úteis?
+- Quais formatos de vídeo trazem metadados úteis?
+
+Decidido em 2026-11-17: grupos **convivem** com o "projeto de uma pasta"; gerenciador de tags
+dentro do Importar; metadados pelo `reconhecer.py` se ele der conta, senão ExifTool; legendas
+refeitas sobre os cortes e posições alterados ao salvar o projeto; as branches `broll-motion`,
+`sfx` e `edicao` aprovadas. Depois da implementação, o Lucas faz uma rodada de testes manuais.

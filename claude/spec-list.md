@@ -33,7 +33,7 @@ As telas novas e as alteradas, com a branch que as entrega e o arquivo de UI ond
 | Painel de tags do import | nova | fase/tags-import | Pastilhas por categoria com a origem de cada tag (pasta, Lightroom, metadados, manual); campo livre com autocompletar; aplicar a N selecionados | importar.rs |
 | Importar tags de arquivos | nova (janela) | fase/tags-import | Escolher fontes (`.xmp`, `.lrcat`, IPTC e EXIF), o que importar e ver a prévia do mapeamento antes de gravar | importar.rs |
 | Imagens | alterada | fase/tags-import | Grade própria dentro do Importar; tag só no arquivo inteiro, sem cortes | importar.rs, grade.rs |
-| Gerenciador de tags da marca | nova | fase/tags-import | Criar, renomear, remover ou fundir tags; criar em lote; contagem por categoria; coluna de origem; lista de tags sem categoria | nova (tags.rs) |
+| Gerenciador de tags da marca | nova | fase/tags-import | Criar, renomear, remover ou fundir tags; criar em lote; contagem por categoria; coluna de origem; lista de tags sem categoria; fica dentro da aba Importar | importar.rs |
 | Biblioteca de vídeos | nova | fase/cortes | Lista de todos os vídeos com busca, abrir um vídeo, seleção múltipla e filtro por qualquer tipo de tag (vídeo, corte ou ambos; categorias; subpastas; livres; Lightroom e metadados; tipo de corte) | preview.rs |
 | Preview com cortes | alterada | fase/cortes | Tira de quadros com entrada e saída, cortes propostos ajustáveis, tags e nota por corte; tags do vídeo inteiro separadas das tags do corte | preview.rs |
 | Cortes dos selecionados | nova | fase/cortes | Cortes de vários vídeos juntos, agrupados por vídeo, com aceitar propostos, aplicar tag e usar no roteiro | preview.rs |
@@ -41,7 +41,7 @@ As telas novas e as alteradas, com a branch que as entrega e o arquivo de UI ond
 | Vídeo anexado no roteiro | nova | fase/roteiros-abertos | Anexar vídeo que já tem fala e texto: fala transcrita editável, texto que aparece no vídeo digitado, manter áudio original, legendar a fala | roteiros.rs |
 | Versões do roteiro | nova | fase/roteiros-abertos | Lista de versões v1 a vn, comparar e voltar a uma versão | roteiros.rs |
 | Aprovar e gerar projeto | nova (janela) | fase/roteiros-abertos | Modelo e formato (16:9, 9:16, 1:1); faixas a gerar (b-roll, motion, SFX, legenda, texto na tela); partes incluídas; checklist "Pronto para aprovar?" | roteiros.rs |
-| Projetos e sincronia | alterada | fase/filmcraft-sync | Mostrar edição externa no card do projeto, listar diferenças e aplicar nos dois sentidos com confirmação | lista.rs |
+| Projetos e sincronia | alterada | fase/filmcraft-sync | Mostrar edição externa no card do projeto, listar diferenças e aplicar nos dois sentidos com confirmação; ao salvar com cortes ou posições alterados, refazer as legendas sobre as novas posições | lista.rs |
 | Editor do projeto | nova | fase/filmcraft-sync | Parecido com o preview de cortes: roteiro à esquerda, player e timeline de seis faixas no centro, recomendações do momento à direita (b-roll, motion, SFX) | nova (projeto.rs) |
 | Abrir no FilmCraft | ação | fase/filmcraft-sync | Abrir o projeto no tempo da parte, se o CLI aceitar `--seek`; senão só abrir o projeto | roteiros.rs |
 
@@ -124,6 +124,7 @@ Cada branch só fecha com os testes passando antes e depois: `python3 -m unittes
 - [ ] Arquivos `.xmp`, `.lrcat` e originais nunca são alterados
 - [ ] Hierarquia `Categoria|Tag` vira categoria e tag
 - [ ] Conflito de slug entre origens oferece agrupar ou manter separadas, com agrupar como padrão
+- [ ] Grupos convivem com o "projeto de uma pasta"
 - [ ] Mídias de pastas diferentes podem ser agrupadas; o grupo aparece na lista de projetos com o próprio campo de roteiro, que usa só o conteúdo do grupo
 - [ ] Tag renomeada mantém o slug e as marcações
 - [ ] Remover tag pede destino: apagar as marcações ou fundir
@@ -155,6 +156,7 @@ Cada branch só fecha com os testes passando antes e depois: `python3 -m unittes
 - [ ] Nenhuma direção de sincronia grava sem confirmação
 - [ ] Gravação do `.fcproj` tem cópia prévia e passa por `inspect`; se recusar, a cópia volta
 - [ ] Projeto nunca é regerado inteiro se já foi editado à mão
+- [ ] Salvar o projeto com cortes, posições ou ordem alterados refaz as legendas sobre as novas posições
 - [ ] Editor do projeto mostra recomendações de b-roll, motion e SFX por momento do roteiro
 
 ## Busca de b-roll e motion
@@ -223,7 +225,7 @@ Os itens abaixo cobrem uma edição completa. O que tem "(confirmar)" depende do
 - Tocar, pausar, buscar no tempo, tocar só uma parte e prévia de áudio.
 - Exportar para `saidas/` e registrar o estado da exportação no projeto.
 
-Proposta de três branches novas, depois de `fase/roteiros-abertos`: `fase/broll-motion` (busca e motion), `fase/sfx` (biblioteca e sugestão) e `fase/edicao` (recursos de edição). Ainda precisam de aprovação, porque o plano atual tem cinco branches.
+Proposta de três branches novas, depois de `fase/roteiros-abertos`: `fase/broll-motion` (busca e motion), `fase/sfx` (biblioteca e sugestão) e `fase/edicao` (recursos de edição). Aprovadas em 2026-11-17.
 
 ## Perguntas em aberto
 
@@ -234,12 +236,12 @@ Estas decisões dependem do Lucas ou de uma investigação antes do desenvolvime
 3. O stem de música é descartado depois da transcrição? O padrão é descartar.
 4. O `filmcraft-cli` aceita `--seek` para abrir no tempo da parte? Se não, a ação só abre o projeto.
 5. Qual campo do clipe o FilmCraft preserva ao salvar, para guardar o marcador `parte_id`? Confirmar com `filmcraft-cli inspect`.
-6. O gerenciador de tags entra como aba nova ou dentro da aba importar? Esta spec assume aba nova (`tags.rs`).
+6. ~~Gerenciador de tags: aba nova ou dentro do Importar?~~ Decidido em 2026-11-17: dentro do Importar.
 7. ~~Lightroom: `.xmp` ou também `.lrcat`?~~ Decidido em 2026-11-17: os dois.
 8. ~~Separador de hierarquia?~~ Decidido em 2026-11-17: `Categoria|Tag`.
 9. Estrelas e rótulos de cor viram tag? O mockup deixa desligado por padrão.
 10. ~~Mesmo slug de pasta e de arquivo?~~ Decidido em 2026-11-17: a pessoa escolhe agrupar ou manter separadas (padrão: agrupar); além disso, mídias de pastas diferentes podem ser agrupadas num projeto com roteiro próprio (`docs/08`, seção 2).
-11. Qual biblioteca lê IPTC, XMP e EXIF (por exemplo `exiftool`) e quais formatos de vídeo trazem metadados úteis?
+11. ~~Qual biblioteca lê IPTC, XMP e EXIF?~~ Decidido em 2026-11-17: o `acervo/reconhecer.py`, se der conta de tudo; senão ExifTool. Falta saber quais formatos de vídeo trazem metadados úteis.
 12. O texto que já aparece num vídeo anexado ao roteiro é digitado pela pessoa. Sem reconhecimento de imagem, está bom assim?
 13. Um grupo pode ter mais de um roteiro ao mesmo tempo, ou cada grupo é sempre um projeto só?
 
