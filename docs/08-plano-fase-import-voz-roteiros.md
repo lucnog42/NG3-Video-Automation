@@ -87,6 +87,8 @@ corte(id, midia_id, ini, fim, origem, proposto, titulo, nota, criado_em)
                                                -- origem: fala | cena | manual
 corte_tag(corte_id, tag_id, por)
 midia_texto(midia_id, campo, texto, origem)    -- título e legenda dos metadados (busca, não tag)
+grupo(id, nome, criado_em, projeto_id)         -- mídias agrupadas que viram projeto (seção 2)
+grupo_midia(grupo_id, midia_id)                -- a mesma mídia pode estar em vários grupos
 ```
 
 - `hash_rapido` (tamanho + primeiros/últimos MB) para reconhecer arquivo movido sem reprocessar.
@@ -119,7 +121,7 @@ mostra a **prévia do mapeamento** e só grava depois de confirmar. Arquivos `.x
 | Fonte | O que lê | Vira |
 |---|---|---|
 | Sidecar `.xmp` do Lightroom | keywords e keywords hierárquicas (`Local\|Camp Nou`) | tag; a hierarquia vira categoria e tag, origem `lightroom` |
-| Catálogo `.lrcat` (sqlite, só leitura; desligado por padrão) | keywords e coleções | tag, origem `lightroom` |
+| Catálogo `.lrcat` (sqlite, lido numa cópia em `/tmp`, só leitura) | keywords e coleções | tag, origem `lightroom` |
 | IPTC, XMP e EXIF embutidos | keywords, cidade, país, GPS | tag de Local, origem `metadados` |
 | IPTC, XMP e EXIF embutidos | título e legenda | texto em `midia_texto`, não tag |
 | Estrelas e rótulo de cor (desligado por padrão) | avaliação e cor | tag, se a opção estiver marcada |
@@ -127,6 +129,30 @@ mostra a **prévia do mapeamento** e só grava depois de confirmar. Arquivos `.x
 Tag que já existe na marca é reaproveitada pelo slug; tag nova aparece como "nova" na prévia e
 entra sem categoria quando o arquivo não traz hierarquia. Vale para imagens e, quando houver
 metadados, para vídeos. Leitor dos metadados: a decidir (ver perguntas).
+
+Decidido em 2026-11-17:
+
+- **Fontes:** os dois, `.xmp` e `.lrcat`. O catálogo é lido numa cópia, porque o Lightroom
+  aberto mantém lock e WAL.
+- **Hierarquia:** `Categoria|Tag`. O primeiro nível é a categoria da marca; o último, a tag.
+- **Mesmo slug em origens diferentes** (pasta e Lightroom, por exemplo): a prévia mostra o
+  conflito e a pessoa escolhe, por tag, **agrupar** (uma tag com as duas origens) ou **manter
+  separadas**. O padrão é agrupar.
+
+### Agrupar mídias em projeto (decidido em 2026-11-17)
+
+A pessoa pode **agrupar** mídias, da mesma pasta ou de pastas diferentes, e o grupo **vira um
+projeto**. Estende o "montar projeto de uma pasta" (`src/projetos/pasta.py`).
+
+- Criar grupo: a partir de uma pasta ou subpasta inteira, ou de uma seleção múltipla na fila, no
+  acervo ou no resultado de um filtro de tags (pode misturar pastas e importações).
+- O grupo entra na **lista de projetos** com nome, contagem de mídias e status.
+- Cada grupo tem o **próprio campo de geração de roteiro**: a IA e a busca de falas e b-roll
+  consideram só o conteúdo do grupo. O roteiro segue o fluxo da seção 4 (aberto, versões, aprovar
+  gera o `.fcproj`).
+- É anotação: `grupo` e `grupo_midia` em `midia.sqlite`. Nada é copiado ou movido; a mesma mídia
+  pode estar em vários grupos.
+- Mudar as mídias do grupo depois não regera o projeto: o roteiro avisa o que mudou.
 
 ### Gerenciador de tags da marca
 
@@ -222,7 +248,6 @@ A lista completa (12 perguntas) está em `claude/spec-list.md`. As principais:
 - Quantas tags livres viram categoria da marca? (revisar a cada ~50 mídias importadas)
 - Cortes por fala: agrupar por pausa ou outro critério? (começar por pausa)
 - O stem de música deve ser guardado ou descartado depois da transcrição? (padrão: descartar)
-- Lightroom: só `.xmp` ou também `.lrcat`? Separador de hierarquia (`Categoria|Tag`)?
-  Keyword com o mesmo slug de uma tag de pasta: funde ou fica separada por origem?
+- Um grupo pode ter mais de um roteiro ao mesmo tempo, ou cada grupo é sempre um projeto só?
 - Qual leitor de IPTC/XMP/EXIF (por exemplo `exiftool`) e quais formatos de vídeo trazem
   metadados úteis?

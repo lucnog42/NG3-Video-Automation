@@ -5,7 +5,8 @@ Guia para quem (humano ou Claude) mexe neste repositório. Leia antes de qualque
 ## Antes de mudar qualquer coisa
 
 1. `git status` limpo. Se houver algo pendente, **commit primeiro** (regra do Lucas).
-2. Trabalhe direto na instalação do SDD: `/run/media/doykoy/SDD/NG3-Video-Automation`.
+2. O repositório de trabalho fica em `~/Work/NG3-Video-Automation` (a cópia antiga do SDD foi
+   para a Lixeira em 2026-11-13).
 3. Uma frente por branch: `fase/separacao-voz`, `fase/tags-import`, `fase/cortes`, `fase/roteiros-abertos`,
    `fase/filmcraft-sync` (ver `docs/08-plano-fase-import-voz-roteiros.md` e `claude/spec-list.md`).
 4. Rode os testes antes e depois: `python3 -m unittest discover -s testes`.

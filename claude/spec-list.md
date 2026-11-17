@@ -88,6 +88,8 @@ As tabelas novas ficam em `dados/marcas/<marca>/midia.sqlite`:
 | `corte` | id, midia_id, ini, fim, origem | Anotação de `fala`, `cena` ou `manual`; nunca um arquivo novo |
 | `corte_tag` | corte_id, tag_id, por | Tag do corte, independente das tags da mídia |
 | `midia_texto` | midia_id, campo, texto, origem | Título e legenda lidos dos metadados, usados na busca de b-roll |
+| `grupo` | id, nome, criado_em, projeto_id | Mídias agrupadas (de uma ou várias pastas) que viram projeto, com roteiro próprio |
+| `grupo_midia` | grupo_id, midia_id | Mídias do grupo; uma mídia pode estar em vários grupos |
 
 Corte manual nunca é sobrescrito por reprocessamento. Cada salvamento de roteiro grava `roteiros/<id>/v<n>.json`, e aprovar um roteiro não o trava. Tag da mídia e tag do corte são níveis separados: mudar uma não muda a outra.
 
@@ -98,7 +100,7 @@ A janela "Importar tags de arquivos" lê as fontes abaixo, mostra a prévia do m
 | Fonte | O que lê | Vira |
 | --- | --- | --- |
 | Sidecar `.xmp` do Lightroom | Keywords e keywords hierárquicas (por exemplo `Local\|Camp Nou`) | Tag; a hierarquia vira categoria e tag, com origem `lightroom` |
-| Catálogo `.lrcat` | Keywords e coleções (leitura apenas) | Tag com origem `lightroom` |
+| Catálogo `.lrcat` | Keywords e coleções (cópia em `/tmp`, leitura apenas) | Tag com origem `lightroom` |
 | IPTC, XMP e EXIF embutidos | Keywords, cidade, país, GPS | Tag de Local com origem `metadados` |
 | IPTC, XMP e EXIF embutidos | Título e legenda | Texto de busca em `midia_texto`, não tag |
 | Estrelas e rótulo de cor | Avaliação e cor | Tag só se a opção estiver marcada (desligada por padrão) |
@@ -119,8 +121,10 @@ Cada branch só fecha com os testes passando antes e depois: `python3 -m unittes
 - [ ] Aplicar tag a N selecionados de uma vez
 - [ ] Importar tags de `.xmp`, `.lrcat` e metadados mostra a prévia do mapeamento antes de gravar
 - [ ] Tag importada guarda a origem (`lightroom` ou `metadados`) e aparece com ela no painel e no gerenciador
-- [ ] Hierarquia do Lightroom vira categoria e tag
 - [ ] Arquivos `.xmp`, `.lrcat` e originais nunca são alterados
+- [ ] Hierarquia `Categoria|Tag` vira categoria e tag
+- [ ] Conflito de slug entre origens oferece agrupar ou manter separadas, com agrupar como padrão
+- [ ] Mídias de pastas diferentes podem ser agrupadas; o grupo aparece na lista de projetos com o próprio campo de roteiro, que usa só o conteúdo do grupo
 - [ ] Tag renomeada mantém o slug e as marcações
 - [ ] Remover tag pede destino: apagar as marcações ou fundir
 
@@ -231,12 +235,13 @@ Estas decisões dependem do Lucas ou de uma investigação antes do desenvolvime
 4. O `filmcraft-cli` aceita `--seek` para abrir no tempo da parte? Se não, a ação só abre o projeto.
 5. Qual campo do clipe o FilmCraft preserva ao salvar, para guardar o marcador `parte_id`? Confirmar com `filmcraft-cli inspect`.
 6. O gerenciador de tags entra como aba nova ou dentro da aba importar? Esta spec assume aba nova (`tags.rs`).
-7. Lightroom: ler só os sidecars `.xmp` ou também o catálogo `.lrcat`? O mockup oferece os dois, com o catálogo desligado por padrão.
-8. Qual separador de hierarquia usar e como mapear para as categorias da marca? O mockup assume `Categoria|Tag`.
+7. ~~Lightroom: `.xmp` ou também `.lrcat`?~~ Decidido em 2026-11-17: os dois.
+8. ~~Separador de hierarquia?~~ Decidido em 2026-11-17: `Categoria|Tag`.
 9. Estrelas e rótulos de cor viram tag? O mockup deixa desligado por padrão.
-10. Quando a keyword do arquivo tem o mesmo slug de uma tag de pasta, as duas se fundem ou ficam separadas por origem?
+10. ~~Mesmo slug de pasta e de arquivo?~~ Decidido em 2026-11-17: a pessoa escolhe agrupar ou manter separadas (padrão: agrupar); além disso, mídias de pastas diferentes podem ser agrupadas num projeto com roteiro próprio (`docs/08`, seção 2).
 11. Qual biblioteca lê IPTC, XMP e EXIF (por exemplo `exiftool`) e quais formatos de vídeo trazem metadados úteis?
 12. O texto que já aparece num vídeo anexado ao roteiro é digitado pela pessoa. Sem reconhecimento de imagem, está bom assim?
+13. Um grupo pode ter mais de um roteiro ao mesmo tempo, ou cada grupo é sempre um projeto só?
 
 ## Fontes
 
